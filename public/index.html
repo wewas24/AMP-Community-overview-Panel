@@ -123,7 +123,7 @@
           </label>
           <span class="visually-hidden" id="visitor-refresh-note">Diese Einstellung gilt nur für deinen Browser.</span>
           <button class="button secondary" id="use-admin-refresh-default" type="button">Admin-Standard</button>
-          <button class="button secondary" id="admin-button" type="button">Verwalten</button>
+          <button class="button secondary" id="admin-button" type="button">Anmelden</button>
           <button class="button" id="refresh-button" type="button">Jetzt aktualisieren</button>
         </div>
       </header>
@@ -164,8 +164,9 @@
               <label class="full-row">AMP- oder Community-Adresse <input id="server-url" type="url" placeholder="https://amp.beispiel.de/c/…" required /></label>
               <div class="connection-panel full-row">
                 <div class="connection-heading"><div><strong>Automatische Spielserver-Prüfung</strong><p>Die Zieladresse wird aus dem „Connect“-Button der Community-Seite übernommen. Ein Spieltyp ist nicht nötig.</p></div><button class="button secondary" id="detect-connection" type="button">Aus „Connect“ übernehmen</button></div>
-                <div class="connection-grid"><label>Spielserver-Adresse <input id="server-connection-host" maxlength="253" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Wird automatisch erkannt" /></label><label>Port <input id="server-connection-port" type="number" min="1" max="65535" step="1" inputmode="numeric" placeholder="Port" /></label></div>
-                <p class="connection-hint" id="connection-hint">Ohne erkannte Adresse zeigt die Übersicht den Status „Unbekannt“.</p>
+                <input id="server-connection-hint" type="hidden" />
+                <div class="connection-grid"><label>Spielserver-Adresse <input id="server-connection-host" maxlength="253" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Wird automatisch erkannt" /></label><label>Port <input id="server-connection-port" type="number" min="1" max="65535" step="1" inputmode="numeric" placeholder="Port" /></label><label>TeamSpeak-Query-Port <input id="teamspeak-query-port" type="number" min="1" max="65535" step="1" inputmode="numeric" placeholder="Optional, meist 10011" /></label></div>
+                <p class="connection-hint" id="connection-hint">Ohne erkannte Adresse zeigt die Übersicht den Status „Unbekannt“. Für TeamSpeak ist der Query-Port optional; bei abweichender Konfiguration hier eintragen.</p>
               </div>
               <label class="full-row">Kurzbeschreibung <textarea id="server-description" maxlength="300" placeholder="Optional: Hinweise zu diesem Server, Spielmodus oder Wartungsfenster."></textarea></label>
               <label>Sichtbarkeit <select id="server-visibility"><option value="visible">Öffentlich anzeigen</option><option value="maintenance">Öffentlich mit Wartungshinweis</option><option value="hidden">Nur im Adminbereich verstecken</option></select></label>
@@ -216,6 +217,7 @@
       const grid = document.querySelector("#server-grid");
       const siteTitleElement = document.querySelector("#site-title");
       const refreshButton = document.querySelector("#refresh-button");
+      const adminButton = document.querySelector("#admin-button");
       const refreshLabel = document.querySelector("#refresh-label");
       const countdownLabel = document.querySelector("#countdown-label");
       const visitorRefreshInput = document.querySelector("#visitor-refresh-interval");
@@ -241,6 +243,8 @@
       const detectConnectionButton = document.querySelector("#detect-connection");
       const connectionHostInput = document.querySelector("#server-connection-host");
       const connectionPortInput = document.querySelector("#server-connection-port");
+      const connectionServiceHintInput = document.querySelector("#server-connection-hint");
+      const teamSpeakQueryPortInput = document.querySelector("#teamspeak-query-port");
       const connectionHint = document.querySelector("#connection-hint");
       let publicServers = [];
       let managedServers = [];
@@ -627,6 +631,7 @@
         const response = await api("session", { headers: {} });
         const session = await response.json();
         admin = session.authenticated ? { username: session.username } : null;
+        adminButton.textContent = admin ? "Verwaltung" : "Anmelden";
         loginForm.hidden = Boolean(admin);
         manager.hidden = !admin;
         document.querySelector("#admin-description").textContent = admin ? "Bearbeite alle Einstellungen der öffentlichen Serverübersicht." : "Melde dich mit deinem Administratorkonto an.";
@@ -639,6 +644,8 @@
         document.querySelector("#server-id").value = "";
         document.querySelector("#server-category").value = "Allgemein";
         document.querySelector("#server-visibility").value = "visible";
+        connectionServiceHintInput.value = "";
+        teamSpeakQueryPortInput.value = "";
         connectionHint.textContent = "Ohne erkannte Adresse zeigt die Übersicht den Status „Unbekannt“.";
         document.querySelector("#server-form-title").textContent = "Server hinzufügen";
         document.querySelector("#save-server-button").textContent = "Server hinzufügen";
@@ -654,6 +661,8 @@
         document.querySelector("#server-url").value = server.url;
         connectionHostInput.value = server.connection?.host || "";
         connectionPortInput.value = server.connection?.port || "";
+        connectionServiceHintInput.value = server.connection?.serviceHint || "";
+        teamSpeakQueryPortInput.value = server.connection?.teamSpeakQueryPort || "";
         connectionHint.textContent = server.connection ? `Gespeicherte Spieladresse: ${server.connection.host}:${server.connection.port}` : "Keine Spieladresse gespeichert. Sie kann aus dem „Connect“-Button übernommen werden.";
         document.querySelector("#server-description").value = server.description || "";
         document.querySelector("#server-visibility").value = server.visibility || "visible";
@@ -694,11 +703,21 @@
 
       function endpointFromText(value) {
         if (typeof value !== "string") return null;
+        const teamSpeak = /ts3server:|teamspeak/i.test(value);
+        try {
+          const url = new URL(value);
+          const port = Number(url.searchParams.get("port"));
+          if ((url.protocol === "ts3server:" || url.protocol === "teamspeak:") && url.hostname && Number.isInteger(port) && port >= 1 && port <= 65535) {
+            return { host: url.hostname, port, serviceHint: "teamspeak" };
+          }
+        } catch {
+          // Kein vollständiger Verbindungslink; danach nach host:port suchen.
+        }
         const pattern = /(?:\[([0-9a-f:]+)\]|((?:\d{1,3}\.){3}\d{1,3}|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}|localhost))\s*:\s*(\d{1,5})/ig;
         const match = pattern.exec(value);
         if (!match) return null;
         const port = Number(match[3]);
-        return Number.isInteger(port) && port >= 1 && port <= 65535 ? { host: match[1] || match[2], port } : null;
+        return Number.isInteger(port) && port >= 1 && port <= 65535 ? { host: match[1] || match[2], port, serviceHint: teamSpeak ? "teamspeak" : "" } : null;
       }
 
       function connectionFromCommunityDocument(document) {
@@ -763,7 +782,7 @@
         });
       }
 
-      document.querySelector("#admin-button").addEventListener("click", async () => {
+      adminButton.addEventListener("click", async () => {
         loginError.textContent = "";
         clearMessages();
         try {
@@ -791,6 +810,7 @@
           const endpoint = await detectConnectionFromCommunityPage(document.querySelector("#server-url").value);
           connectionHostInput.value = endpoint.host;
           connectionPortInput.value = endpoint.port;
+          connectionServiceHintInput.value = endpoint.serviceHint || "";
           connectionHint.textContent = `Erkannt: ${endpoint.host}:${endpoint.port}. Nach dem Speichern beginnt die automatische Prüfung.`;
         } catch (error) {
           connectionHint.textContent = error.message || "Die Spielserver-Adresse konnte nicht automatisch erkannt werden.";
@@ -821,6 +841,8 @@
           url: document.querySelector("#server-url").value,
           connectionHost: connectionHostInput.value,
           connectionPort: connectionPortInput.value,
+          connectionHint: connectionServiceHintInput.value,
+          teamSpeakQueryPort: teamSpeakQueryPortInput.value,
           description: document.querySelector("#server-description").value,
           visibility: document.querySelector("#server-visibility").value
         };
@@ -909,6 +931,7 @@
         empty.textContent = `Die Serverübersicht konnte nicht geladen werden: ${error.message}`;
         grid.replaceChildren(empty);
       });
+      loadSession().catch(() => { adminButton.textContent = "Anmelden"; });
     </script>
   </body>
 </html>

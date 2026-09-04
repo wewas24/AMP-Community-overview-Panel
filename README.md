@@ -54,9 +54,9 @@ oben beschrieben. Die Nginx-Weiterleitung bindet ihn dann sauber unter
 
 ## Im Alltag
 
-Auf der Übersicht oben rechts **„Verwalten“** wählen und anmelden. Dort lassen
+Auf der Übersicht oben rechts **„Anmelden“** wählen. Erst nach einer erfolgreichen Anmeldung wird daraus **„Verwaltung“** und die geschützte Verwaltungsoberfläche wird freigeschaltet. Dort lassen
 sich Server mit Anzeigename, Kategorie, Kurzbeschreibung und Sichtbarkeit
-pflegen. Über **„Aus Connect übernehmen“** kann bei Community-Seiten auf derselben Domain die Spielserver-Adresse samt Port automatisch erfasst werden. Das Dashboard prüft TCP-Ports, Steam-Abfragen (auch den üblichen Arma-Query-Port `+1`) und bei TeamSpeak-Voice-Ports die optionale ServerQuery-Abfrage zentral alle 30 Sekunden. Der Webseitenname wird im Bereich **„Seiteneinstellungen“** geändert. Unter „Standard-Aktualisierung“ wird die Zeit für neue Besucher festgelegt. Jeder Besucher kann oben auf der Übersicht den gemeinsamen Rhythmus nur für seinen eigenen Browser ändern. Akzeptiert wird jede öffentliche HTTPS-Adresse
+pflegen. Über **„Aus Connect übernehmen“** kann bei Community-Seiten auf derselben Domain die Spielserver-Adresse samt Port automatisch erfasst werden. Das Dashboard prüft TCP-Ports, Steam-Abfragen (auch den üblichen Arma-Query-Port `+1`) und bei TeamSpeak-Voice-Ports die optionale ServerQuery-Abfrage zentral alle 30 Sekunden. TeamSpeak-Client-Links markieren den Server dabei automatisch als TeamSpeak. Falls ServerQuery nicht den Standardport `10011` nutzt, kann dieser in der Verwaltung optional eingetragen werden. Der Webseitenname wird im Bereich **„Seiteneinstellungen“** geändert. Unter „Standard-Aktualisierung“ wird die Zeit für neue Besucher festgelegt. Jeder Besucher kann oben auf der Übersicht den gemeinsamen Rhythmus nur für seinen eigenen Browser ändern. Akzeptiert wird jede öffentliche HTTPS-Adresse
 eines AMP-Servers oder seiner Community-Seite, zum Beispiel
 `https://amp.beispiel.de/c/...` oder eine eigene HTTPS-Adresse mit Port.
 

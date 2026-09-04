@@ -24,7 +24,7 @@ const defaultRefreshIntervalSeconds = 10;
 const defaultSiteTitle = "Meine Gameserver";
 const gameStatusIntervalMs = 30_000;
 const gameStatusTimeoutMs = 3_500;
-const teamSpeakQueryPort = 10011;
+const defaultTeamSpeakQueryPort = 10011;
 const sessions = new Map();
 const loginAttempts = new Map();
 const availabilityByServer = new Map();
@@ -137,15 +137,28 @@ function validateGameConnection(hostValue, portValue) {
   return { host, port };
 }
 
+function normalizeServiceHint(value) {
+  return value === "teamspeak" ? "teamspeak" : null;
+}
+
+function optionalPort(value) {
+  if (value === undefined || value === null || String(value).trim() === "") return null;
+  const port = Number(value);
+  return Number.isInteger(port) && port >= 1 && port <= 65535 ? port : null;
+}
+
 function connectionFromStored(input) {
   const connection = input?.connection && typeof input.connection === "object"
     ? input.connection
-    : { host: input?.connectionHost, port: input?.connectionPort };
+    : { host: input?.connectionHost, port: input?.connectionPort, serviceHint: input?.connectionHint, teamSpeakQueryPort: input?.teamSpeakQueryPort };
   const host = cleanGameHost(connection?.host);
   const hasPort = connection?.port !== undefined && connection?.port !== null && String(connection.port).trim() !== "";
   if (!host && !hasPort) return null;
   try {
-    return validateGameConnection(host, connection.port);
+    const saved = validateGameConnection(host, connection.port);
+    const serviceHint = normalizeServiceHint(connection?.serviceHint);
+    const teamSpeakQueryPort = optionalPort(connection?.teamSpeakQueryPort);
+    return { ...saved, ...(serviceHint ? { serviceHint } : {}), ...(teamSpeakQueryPort ? { teamSpeakQueryPort } : {}) };
   } catch {
     return null;
   }
@@ -154,14 +167,21 @@ function connectionFromStored(input) {
 function connectionFromInput(input) {
   const connection = input?.connection && typeof input.connection === "object"
     ? input.connection
-    : { host: input?.connectionHost, port: input?.connectionPort };
+    : { host: input?.connectionHost, port: input?.connectionPort, serviceHint: input?.connectionHint, teamSpeakQueryPort: input?.teamSpeakQueryPort };
   const host = cleanGameHost(connection?.host);
   const hasPort = connection?.port !== undefined && connection?.port !== null && String(connection.port).trim() !== "";
   if (!host && !hasPort) return null;
   if (!host || !hasPort) {
     throw new Error("Für die automatische Statusprüfung werden Spielserver-Adresse und Port zusammen benötigt.");
   }
-  return validateGameConnection(host, connection.port);
+  const saved = validateGameConnection(host, connection.port);
+  const serviceHint = normalizeServiceHint(connection?.serviceHint ?? input?.connectionHint);
+  const queryPortValue = connection?.teamSpeakQueryPort ?? input?.teamSpeakQueryPort;
+  const teamSpeakQueryPort = optionalPort(queryPortValue);
+  if (queryPortValue !== undefined && queryPortValue !== null && String(queryPortValue).trim() !== "" && !teamSpeakQueryPort) {
+    throw new Error("Der TeamSpeak-ServerQuery-Port muss zwischen 1 und 65.535 liegen.");
+  }
+  return { ...saved, ...(serviceHint ? { serviceHint } : {}), ...(teamSpeakQueryPort ? { teamSpeakQueryPort } : {}) };
 }
 
 function normalizeServer(input, index = 0) {
@@ -345,7 +365,9 @@ function probeTeamSpeakQuery(connection) {
   return new Promise((resolve) => {
     const startedAt = Date.now();
     let done = false;
-    const socket = connect({ host: connection.host, port: teamSpeakQueryPort });
+    let selectedVoiceServer = false;
+    let responseText = "";
+    const socket = connect({ host: connection.host, port: connection.teamSpeakQueryPort || defaultTeamSpeakQueryPort });
     const finish = (state, detail) => {
       if (done) return;
       done = true;
@@ -355,27 +377,37 @@ function probeTeamSpeakQuery(connection) {
     };
     const timeout = setTimeout(() => finish("unknown", "Die TeamSpeak-Abfrage hat nicht geantwortet."), gameStatusTimeoutMs);
     timeout.unref?.();
-    socket.once("data", (message) => {
-      const greeting = message.toString("utf8");
-      if (greeting.includes("TS3") || greeting.includes("TeamSpeak")) finish("online", "Der TeamSpeak-Server antwortet auf ServerQuery.");
-      else finish("unknown", "Die TeamSpeak-Abfrage lieferte keine erkennbare Antwort.");
+    socket.on("data", (message) => {
+      responseText += message.toString("utf8");
+      if (!selectedVoiceServer && (responseText.includes("TS3") || responseText.includes("TeamSpeak"))) {
+        selectedVoiceServer = true;
+        responseText = "";
+        socket.write(`use port=${connection.port}\n`);
+        return;
+      }
+      if (!selectedVoiceServer) return;
+      if (responseText.includes("error id=0 msg=ok")) {
+        finish("online", "Der TeamSpeak-Voice-Server antwortet auf ServerQuery.");
+      } else if (/error id=[1-9]\d*/.test(responseText)) {
+        finish("offline", "Der TeamSpeak-ServerQuery-Dienst läuft, aber dieser Voice-Port ist nicht aktiv.");
+      }
     });
     socket.once("error", () => finish("unknown", "Der TeamSpeak-Query-Port ist nicht erreichbar oder deaktiviert."));
   });
 }
 
-function isLikelyTeamSpeakVoicePort(port) {
-  return Number.isInteger(port) && port >= 9987 && port <= 9999;
+function isLikelyTeamSpeak(connection) {
+  return connection.serviceHint === "teamspeak" || Boolean(connection.teamSpeakQueryPort) || (Number.isInteger(connection.port) && connection.port >= 9987 && connection.port <= 9999);
 }
 
 async function probeGameConnection(connection) {
   const checks = [probeTcpConnection(connection), probeSteamQuery(connection, connection.port)];
   if (connection.port < 65535) checks.push(probeSteamQuery(connection, connection.port + 1));
-  if (isLikelyTeamSpeakVoicePort(connection.port)) checks.push(probeTeamSpeakQuery(connection));
+  if (isLikelyTeamSpeak(connection)) checks.push(probeTeamSpeakQuery(connection));
   const results = await Promise.all(checks);
   const online = results.find((result) => result.state === "online");
   if (online) return online;
-  if (isLikelyTeamSpeakVoicePort(connection.port)) {
+  if (isLikelyTeamSpeak(connection)) {
     return { state: "unknown", detail: "Der TeamSpeak-Voice-Port antwortet nicht auf allgemeine Abfragen und ServerQuery ist nicht erreichbar.", checkedAt: new Date().toISOString() };
   }
   const tcpResult = results[0];
