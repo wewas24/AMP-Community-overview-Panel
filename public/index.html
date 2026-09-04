@@ -1,0 +1,755 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="Öffentliche Übersicht der Gameserver-Community-Seiten." />
+    <meta name="theme-color" content="#08111f" />
+    <title>Meine Gameserver</title>
+    <style>
+      :root { --page:#070b14; --page-top:#0d1b34; --surface:#101d32; --surface-soft:rgba(16,29,50,.92); --border:rgba(159,187,226,.24); --text:#f4f7fb; --muted:#a8b5c8; --accent:#74e2b2; --accent-deep:#0e7351; --danger:#ff9a9a; --warning:#ffd184; --shadow:0 20px 50px rgba(0,0,0,.28); }
+      * { box-sizing:border-box; }
+      html { background:var(--page); }
+      body { min-width:320px; margin:0; color:var(--text); background:radial-gradient(circle at 12% 0%,rgba(49,127,183,.26),transparent 31rem),radial-gradient(circle at 92% 8%,rgba(44,182,129,.13),transparent 23rem),linear-gradient(180deg,var(--page-top),var(--page) 37rem); font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif; }
+      button,input,textarea,select { font:inherit; }
+      button { cursor:pointer; }
+      button:focus-visible,a:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible { outline:3px solid #fff; outline-offset:3px; }
+      .shell { width:min(1800px,calc(100% - 32px)); margin:0 auto; padding:34px 0 52px; }
+      .topbar { display:flex; align-items:flex-start; justify-content:space-between; gap:24px; padding:8px 0 24px; }
+      .eyebrow { display:flex; align-items:center; gap:9px; margin:0 0 9px; color:var(--accent); font-size:.78rem; font-weight:750; letter-spacing:.12em; text-transform:uppercase; }
+      .live-dot { width:8px; height:8px; border-radius:50%; background:var(--accent); box-shadow:0 0 0 5px rgba(116,226,178,.12),0 0 16px rgba(116,226,178,.85); }
+      h1 { margin:0; font-size:clamp(2rem,4vw,3.25rem); line-height:1.04; letter-spacing:-.05em; }
+      .intro { max-width:680px; margin:14px 0 0; color:var(--muted); font-size:1rem; line-height:1.55; }
+      .controls { display:flex; flex-wrap:wrap; align-items:center; gap:12px; flex:0 0 auto; padding:12px 14px; border:1px solid var(--border); border-radius:14px; background:rgba(8,15,27,.5); box-shadow:var(--shadow); }
+      .refresh-info { color:var(--muted); font-size:.76rem; line-height:1.35; text-align:right; }
+      .refresh-info strong { display:block; color:var(--text); font-size:.84rem; }
+      .visitor-refresh-control { display:grid; gap:3px; color:var(--muted); font-size:.69rem; font-weight:750; }
+      .visitor-refresh-input { width:94px; min-height:38px; padding:0 9px; font-size:.84rem; }
+      .button { display:inline-flex; align-items:center; justify-content:center; min-height:42px; padding:0 14px; border:0; border-radius:10px; color:#062217; background:var(--accent); font-size:.86rem; font-weight:750; text-decoration:none; transition:transform 140ms ease,background 140ms ease; }
+      .button:hover { background:#9af0ca; transform:translateY(-1px); }
+      .button:disabled { cursor:wait; opacity:.58; transform:none; }
+      .button.secondary { color:var(--text); background:transparent; border:1px solid var(--border); }
+      .button.secondary:hover { background:rgba(255,255,255,.08); }
+      .button.warning { color:#392300; background:var(--warning); }
+      .filter-bar { display:flex; flex-wrap:wrap; align-items:end; gap:12px; margin:0 0 20px; padding:14px; border:1px solid var(--border); border-radius:14px; background:rgba(8,15,27,.38); }
+      .filter-label { min-width:170px; }
+      .filter-label label { margin-bottom:5px; }
+      label { display:grid; gap:6px; color:var(--muted); font-size:.82rem; font-weight:700; }
+      input,textarea,select { width:100%; min-height:52px; padding:0 15px; border:1px solid var(--border); border-radius:10px; color:var(--text); background:#091321; font-size:1rem; }
+      textarea { min-height:96px; padding:12px 15px; resize:vertical; }
+      input::placeholder,textarea::placeholder { color:#65768d; }
+      .filter-summary { margin:0 0 3px auto; color:var(--muted); font-size:.82rem; }
+      .server-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(min(100%,620px),1fr)); gap:20px; }
+      .server-card { overflow:hidden; min-width:0; border:1px solid var(--border); border-radius:18px; background:var(--surface-soft); box-shadow:var(--shadow); }
+      .card-header { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:15px 16px 14px; border-bottom:1px solid var(--border); background:linear-gradient(110deg,rgba(27,49,78,.88),rgba(16,29,50,.96)); }
+      .server-ident { min-width:0; }
+      .server-name { display:flex; align-items:center; gap:10px; min-width:0; font-size:1rem; font-weight:780; }
+      .server-icon { display:grid; flex:0 0 auto; width:28px; height:28px; place-items:center; border-radius:8px; color:var(--accent); background:rgba(116,226,178,.12); }
+      .server-icon svg { width:17px; height:17px; }
+      .server-meta { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 0 38px; }
+      .tag { display:inline-flex; align-items:center; min-height:22px; padding:0 8px; border-radius:99px; color:#d8e4f4; background:rgba(255,255,255,.08); font-size:.69rem; font-weight:720; }
+      .tag.online { color:#b9ffe0; background:rgba(69,196,137,.16); }
+      .tag.offline { color:#ffd2d2; background:rgba(255,118,118,.16); }
+      .tag.maintenance { color:#ffe0a7; background:rgba(255,183,80,.15); }
+      .card-actions { display:flex; flex:0 0 auto; align-items:center; gap:9px; }
+      .icon-button { display:grid; width:36px; height:36px; padding:0; place-items:center; border:1px solid var(--border); border-radius:9px; color:var(--text); background:rgba(5,12,23,.34); }
+      .icon-button:hover { background:rgba(255,255,255,.1); }
+      .open-link { flex:0 0 auto; color:var(--accent); font-size:.84rem; font-weight:700; text-decoration:none; }
+      .open-link:hover { color:#b7ffdb; text-decoration:underline; }
+      .server-description { margin:0; padding:11px 16px; border-bottom:1px solid var(--border); color:var(--muted); font-size:.84rem; line-height:1.45; }
+      iframe { display:block; width:100%; height:900px; border:0; background:var(--surface); }
+      .server-card:fullscreen { width:100vw; height:100vh; border:0; border-radius:0; background:var(--page); }
+      .server-card:fullscreen iframe { height:calc(100vh - 88px); }
+      .server-card:fullscreen .server-description + iframe { height:calc(100vh - 135px); }
+      .empty { grid-column:1 / -1; padding:52px 20px; border:1px dashed var(--border); border-radius:18px; color:var(--muted); text-align:center; }
+      .footer-note { margin:22px 0 0; color:#8494aa; font-size:.8rem; line-height:1.5; text-align:center; }
+      dialog { width:min(920px,calc(100% - 28px)); max-height:calc(100vh - 28px); padding:0; border:1px solid var(--border); border-radius:18px; color:var(--text); background:#0d1829; box-shadow:0 30px 90px rgba(0,0,0,.64); }
+      dialog::backdrop { background:rgba(1,4,10,.72); backdrop-filter:blur(4px); }
+      .dialog-content { max-height:calc(100vh - 28px); overflow:auto; padding:22px; }
+      .dialog-title-row { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:18px; }
+      h2 { margin:0; font-size:1.3rem; letter-spacing:-.02em; }
+      h3 { margin:0 0 12px; font-size:1rem; }
+      .dialog-copy { margin:6px 0 0; color:var(--muted); font-size:.88rem; line-height:1.45; }
+      .close { width:36px; height:36px; padding:0; border:1px solid var(--border); border-radius:9px; color:var(--text); background:transparent; font-size:1.15rem; }
+      .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:13px; }
+      .form-grid.one { grid-template-columns:1fr; }
+      .full-row { grid-column:1 / -1; }
+      .error { min-height:1.25em; margin:12px 0 0; color:var(--danger); font-size:.85rem; }
+      .success { min-height:1.25em; margin:12px 0 0; color:var(--accent); font-size:.85rem; }
+      .manager { display:grid; gap:22px; }
+      .admin-section { padding:17px; border:1px solid var(--border); border-radius:13px; background:rgba(255,255,255,.025); }
+      .section-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:13px; }
+      .section-heading h3 { margin:0; }
+      .section-heading p { margin:4px 0 0; color:var(--muted); font-size:.78rem; line-height:1.4; }
+      .form-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:9px; margin-top:14px; }
+      .manage-list { display:grid; gap:8px; }
+      .manage-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px; border:1px solid var(--border); border-radius:11px; }
+      .manage-info { min-width:0; }
+      .manage-name { min-width:0; font-size:.92rem; font-weight:740; }
+      .manage-url { overflow:hidden; margin-top:3px; color:var(--muted); font-size:.74rem; text-overflow:ellipsis; white-space:nowrap; }
+      .manage-flags { margin-top:6px; color:#c6d2e1; font-size:.73rem; }
+      .row-actions { display:flex; flex:0 0 auto; flex-wrap:wrap; justify-content:flex-end; gap:6px; }
+      .small-button { min-height:34px; padding:0 10px; border:1px solid var(--border); border-radius:8px; color:var(--text); background:rgba(255,255,255,.04); font-size:.76rem; font-weight:700; }
+      .small-button:hover { background:rgba(255,255,255,.1); }
+      .small-button.delete { border-color:rgba(255,150,150,.35); color:#ffd0d0; background:rgba(255,150,150,.08); }
+      .small-button.delete:hover { background:rgba(255,150,150,.16); }
+      .admin-footer { display:flex; justify-content:space-between; align-items:center; gap:12px; border-top:1px solid var(--border); padding-top:16px; color:var(--muted); font-size:.8rem; }
+      .visually-hidden { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
+      @media (max-width:760px) { .shell { width:min(100% - 22px,1800px); padding-top:18px; } .topbar { flex-direction:column; gap:18px; padding-bottom:20px; } .controls { width:100%; justify-content:space-between; } .refresh-info { text-align:left; } .filter-summary { width:100%; margin:0; } .server-grid { grid-template-columns:1fr; gap:14px; } .server-card { border-radius:14px; } iframe { height:760px; } .form-grid { grid-template-columns:1fr; } .full-row { grid-column:auto; } .manage-row { align-items:flex-start; flex-direction:column; } .row-actions { width:100%; justify-content:flex-start; } .card-header { align-items:flex-start; } .open-link { display:none; } }
+      @media (max-width:480px) { .controls { align-items:flex-start; flex-wrap:wrap; } .server-meta { margin-left:0; } .card-actions { gap:4px; } .refresh-select { max-width:112px; } .filter-label { width:100%; } .admin-footer { align-items:flex-start; flex-direction:column; } }
+    </style>
+  </head>
+  <body>
+    <main class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow"><span class="live-dot" aria-hidden="true"></span> Live-Übersicht</p>
+          <h1>Meine Gameserver</h1>
+          <p class="intro">Status, Spieler und Infos aller Server auf einen Blick. Die einzelnen Community-Seiten werden automatisch alle zehn Sekunden neu geladen.</p>
+        </div>
+        <div class="controls" aria-live="polite">
+          <div class="refresh-info"><strong id="refresh-label">Aktualisierung bereit</strong><span id="countdown-label">wird geladen</span></div>
+          <label class="visitor-refresh-control">Alle Kacheln / Sek.
+            <input class="visitor-refresh-input" id="visitor-refresh-interval" type="number" min="5" max="3600" step="1" inputmode="numeric" aria-describedby="visitor-refresh-note" />
+          </label>
+          <span class="visually-hidden" id="visitor-refresh-note">Diese Einstellung gilt nur für deinen Browser.</span>
+          <button class="button secondary" id="use-admin-refresh-default" type="button">Admin-Standard</button>
+          <button class="button secondary" id="admin-button" type="button">Verwalten</button>
+          <button class="button" id="refresh-button" type="button">Jetzt aktualisieren</button>
+        </div>
+      </header>
+
+      <section class="filter-bar" aria-label="Server filtern">
+        <div class="filter-label"><label for="category-filter">Kategorie</label><select id="category-filter"><option value="all">Alle Kategorien</option></select></div>
+        <div class="filter-label"><label for="status-filter">Anzeige</label><select id="status-filter"><option value="all">Alle Server</option><option value="online">Als online markiert</option><option value="offline">Als offline markiert</option><option value="maintenance">Wartung</option><option value="auto">Community-Status</option></select></div>
+        <p class="filter-summary" id="filter-summary"></p>
+      </section>
+
+      <section class="server-grid" id="server-grid" aria-label="Gameserver"></section>
+      <p class="footer-note">Diese Übersicht zeigt ausschließlich die öffentlichen AMP-Community-Seiten. Die AMP-Verwaltung bleibt geschützt.</p>
+    </main>
+
+    <dialog id="admin-dialog" aria-labelledby="admin-title">
+      <div class="dialog-content">
+        <div class="dialog-title-row">
+          <div><h2 id="admin-title">Server verwalten</h2><p class="dialog-copy" id="admin-description">Melde dich mit deinem Administratorkonto an.</p></div>
+          <button class="close" id="close-admin" type="button" aria-label="Fenster schließen">×</button>
+        </div>
+
+        <form class="form-grid one" id="login-form">
+          <label>Benutzername <input id="username" name="username" autocomplete="username" required /></label>
+          <label>Passwort <input id="password" name="password" type="password" autocomplete="current-password" required /></label>
+          <div class="form-actions"><button class="button" type="submit">Anmelden</button></div>
+          <p class="error" id="login-error" aria-live="polite"></p>
+        </form>
+
+        <section class="manager" id="manager" hidden>
+          <form class="admin-section" id="server-form">
+            <div class="section-heading">
+              <div><h3 id="server-form-title">Server hinzufügen</h3><p>Du kannst jede öffentliche HTTPS-Adresse eines AMP-Servers oder einer Community-Seite verwenden.</p></div>
+            </div>
+            <input id="server-id" type="hidden" />
+            <div class="form-grid">
+              <label>Anzeigename <input id="server-name" maxlength="60" placeholder="z. B. Minecraft Survival" required /></label>
+              <label>Kategorie <input id="server-category" maxlength="40" placeholder="z. B. Minecraft" value="Allgemein" /></label>
+              <label class="full-row">AMP- oder Community-Adresse <input id="server-url" type="url" placeholder="https://amp.beispiel.de/c/…" required /></label>
+              <label class="full-row">Kurzbeschreibung <textarea id="server-description" maxlength="300" placeholder="Optional: Hinweise zu diesem Server, Spielmodus oder Wartungsfenster."></textarea></label>
+              <label>Sichtbarkeit <select id="server-visibility"><option value="visible">Öffentlich anzeigen</option><option value="maintenance">Öffentlich mit Wartungshinweis</option><option value="hidden">Nur im Adminbereich verstecken</option></select></label>
+              <label>Status-Markierung <select id="server-status"><option value="auto">Community-Seite zeigt Status</option><option value="online">Als online markieren</option><option value="offline">Als offline markieren</option></select></label>
+            </div>
+            <div class="form-actions"><button class="button secondary" id="cancel-edit" type="button" hidden>Bearbeitung abbrechen</button><button class="button" id="save-server-button" type="submit">Server hinzufügen</button></div>
+            <p class="error" id="server-error" aria-live="polite"></p>
+            <p class="success" id="server-success" aria-live="polite"></p>
+          </form>
+
+          <form class="admin-section" id="refresh-settings-form">
+            <div class="section-heading"><div><h3>Standard-Aktualisierung</h3><p>Dieser Wert wird neuen Besuchern vorgeschlagen. Jeder Besucher kann ihn für seinen Browser ändern.</p></div></div>
+            <div class="form-grid one"><label>Standardzeit (Sekunden) <input id="admin-default-refresh-interval" type="number" min="5" max="3600" step="1" value="10" required /></label></div>
+            <div class="form-actions"><button class="button" type="submit">Standard speichern</button></div>
+            <p class="error" id="refresh-settings-error" aria-live="polite"></p>
+            <p class="success" id="refresh-settings-success" aria-live="polite"></p>
+          </form>
+
+          <section class="admin-section">
+            <div class="section-heading"><div><h3>Reihenfolge und Server</h3><p>Die Pfeile bestimmen die Reihenfolge auf der öffentlichen Übersicht.</p></div></div>
+            <div class="manage-list" id="manage-list"></div>
+          </section>
+
+          <section class="admin-section">
+            <div class="section-heading"><div><h3>Sicherung</h3><p>Export speichert deine Serverliste. Ein Import ersetzt anschließend die gesamte Serverliste.</p></div></div>
+            <div class="form-actions"><input class="visually-hidden" id="import-file" type="file" accept="application/json,.json" /><label class="button secondary" for="import-file">Sicherung importieren</label><button class="button warning" id="export-button" type="button">Sicherung herunterladen</button></div>
+            <p class="error" id="backup-error" aria-live="polite"></p>
+            <p class="success" id="backup-success" aria-live="polite"></p>
+          </section>
+
+          <section class="admin-section">
+            <div class="section-heading"><div><h3>Administratoren</h3><p>Weitere Personen können dieselbe Verwaltungsoberfläche nutzen.</p></div></div>
+            <form class="form-grid" id="admin-form">
+              <label>Neuer Benutzername <input id="new-admin-username" maxlength="32" autocomplete="off" placeholder="z. B. mitadmin" required /></label>
+              <label>Neues Passwort <input id="new-admin-password" type="password" minlength="12" autocomplete="new-password" placeholder="Mindestens 12 Zeichen" required /></label>
+              <div class="form-actions full-row"><button class="button" type="submit">Admin hinzufügen</button></div>
+            </form>
+            <p class="error" id="admin-error" aria-live="polite"></p>
+            <div class="manage-list" id="admin-list"></div>
+          </section>
+
+          <div class="admin-footer"><span id="admin-name"></span><button class="button secondary" id="logout-button" type="button">Abmelden</button></div>
+        </section>
+      </div>
+    </dialog>
+
+    <script>
+      const DEFAULT_REFRESH_INTERVAL_SECONDS = 10;
+      const grid = document.querySelector("#server-grid");
+      const refreshButton = document.querySelector("#refresh-button");
+      const refreshLabel = document.querySelector("#refresh-label");
+      const countdownLabel = document.querySelector("#countdown-label");
+      const visitorRefreshInput = document.querySelector("#visitor-refresh-interval");
+      const useAdminRefreshDefaultButton = document.querySelector("#use-admin-refresh-default");
+      const categoryFilter = document.querySelector("#category-filter");
+      const statusFilter = document.querySelector("#status-filter");
+      const filterSummary = document.querySelector("#filter-summary");
+      const adminDialog = document.querySelector("#admin-dialog");
+      const loginForm = document.querySelector("#login-form");
+      const manager = document.querySelector("#manager");
+      const serverForm = document.querySelector("#server-form");
+      const refreshSettingsForm = document.querySelector("#refresh-settings-form");
+      const manageList = document.querySelector("#manage-list");
+      const adminList = document.querySelector("#admin-list");
+      const loginError = document.querySelector("#login-error");
+      const serverError = document.querySelector("#server-error");
+      const serverSuccess = document.querySelector("#server-success");
+      const backupError = document.querySelector("#backup-error");
+      const backupSuccess = document.querySelector("#backup-success");
+      const adminError = document.querySelector("#admin-error");
+      const refreshSettingsError = document.querySelector("#refresh-settings-error");
+      const refreshSettingsSuccess = document.querySelector("#refresh-settings-success");
+      let publicServers = [];
+      let managedServers = [];
+      let administrators = [];
+      let refreshTimer = null;
+      let nextRefreshAt = 0;
+      let adminDefaultRefreshIntervalSeconds = DEFAULT_REFRESH_INTERVAL_SECONDS;
+      let activeRefreshIntervalSeconds = DEFAULT_REFRESH_INTERVAL_SECONDS;
+      let admin = null;
+
+      const gamepadIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" y1="11" x2="10" y2="11"></line><line x1="8" y1="9" x2="8" y2="13"></line><line x1="15" y1="12" x2="15.01" y2="12"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><path d="M17.5 5.5c-2.3.5-3.6.5-5.5.5s-3.2 0-5.5-.5C4.6 5.1 3 6.6 3 8.5v5c0 2.1 1.7 3.5 3.8 3.5 1.2 0 2.2-.6 2.9-1.5l1-1.3h2.6l1 1.3c.7.9 1.7 1.5 2.9 1.5 2.1 0 3.8-1.4 3.8-3.5v-5c0-1.9-1.6-3.4-3.5-3z"></path></svg>';
+
+      function api(path, options = {}) {
+        return fetch(`api/${path}`, { credentials: "same-origin", headers: { "Content-Type": "application/json", ...(options.headers || {}) }, ...options });
+      }
+
+      function cacheBustedUrl(url) {
+        const separator = url.includes("?") ? "&" : "?";
+        return `${url}${separator}overviewRefresh=${Date.now()}`;
+      }
+
+      function validRefreshInterval(seconds) {
+        return Number.isInteger(seconds) && seconds >= 5 && seconds <= 3600;
+      }
+
+      function visitorRefreshInterval() {
+        try {
+          const seconds = Number(window.localStorage.getItem("amp-dashboard-global-refresh-seconds"));
+          return validRefreshInterval(seconds) ? seconds : null;
+        } catch {
+          return null;
+        }
+      }
+
+      function saveVisitorRefreshInterval(seconds) {
+        try {
+          window.localStorage.setItem("amp-dashboard-global-refresh-seconds", String(seconds));
+        } catch {
+          // Wenn der Browser lokalen Speicher blockiert, gilt die Auswahl bis zum Neuladen.
+        }
+      }
+
+      function useAdminRefreshDefault() {
+        try {
+          window.localStorage.removeItem("amp-dashboard-global-refresh-seconds");
+        } catch {
+          // Die aktuelle Seite kann den Standard trotzdem verwenden.
+        }
+        activeRefreshIntervalSeconds = adminDefaultRefreshIntervalSeconds;
+        scheduleFrameRefresh();
+        updateRefreshSummary();
+      }
+
+      function updateRefreshSummary() {
+        refreshLabel.textContent = `Alle Kacheln: alle ${activeRefreshIntervalSeconds} Sek.`;
+        updateCountdown();
+        visitorRefreshInput.value = activeRefreshIntervalSeconds;
+      }
+
+      function updateCountdown() {
+        if (!nextRefreshAt) {
+          countdownLabel.textContent = `Admin-Standard: ${adminDefaultRefreshIntervalSeconds} Sek. · nur für diesen Browser änderbar`;
+          return;
+        }
+        const seconds = Math.max(0, Math.ceil((nextRefreshAt - Date.now()) / 1000));
+        countdownLabel.textContent = `nächste Aktualisierung in ${seconds} Sek. · Admin-Standard: ${adminDefaultRefreshIntervalSeconds} Sek.`;
+      }
+
+      function clearRefreshTimers() {
+        if (refreshTimer !== null) window.clearTimeout(refreshTimer);
+        refreshTimer = null;
+      }
+
+      function refreshFrame(frame) {
+        frame.src = cacheBustedUrl(frame.dataset.communityUrl);
+      }
+
+      function scheduleFrameRefresh() {
+        clearRefreshTimers();
+        nextRefreshAt = Date.now() + activeRefreshIntervalSeconds * 1000;
+        refreshTimer = window.setTimeout(() => {
+          if (!document.hidden) document.querySelectorAll("iframe[data-community-url]").forEach(refreshFrame);
+          scheduleFrameRefresh();
+        }, activeRefreshIntervalSeconds * 1000);
+      }
+
+      function applyVisitorRefreshInterval(seconds) {
+        if (!validRefreshInterval(seconds)) {
+          visitorRefreshInput.value = activeRefreshIntervalSeconds;
+          return;
+        }
+        activeRefreshIntervalSeconds = seconds;
+        saveVisitorRefreshInterval(seconds);
+        scheduleFrameRefresh();
+        updateRefreshSummary();
+      }
+
+      function shownState(server) {
+        if (server.visibility === "maintenance") return { key: "maintenance", text: "Wartung" };
+        if (server.status === "online") return { key: "online", text: "Online" };
+        if (server.status === "offline") return { key: "offline", text: "Offline" };
+        return { key: "auto", text: "Community-Status" };
+      }
+
+      function makeServerCard(server) {
+        const card = document.createElement("article");
+        card.className = "server-card";
+        const header = document.createElement("header");
+        header.className = "card-header";
+        const identity = document.createElement("div");
+        identity.className = "server-ident";
+        const name = document.createElement("div");
+        name.className = "server-name";
+        const icon = document.createElement("span");
+        icon.className = "server-icon";
+        icon.innerHTML = gamepadIcon;
+        const text = document.createElement("span");
+        text.textContent = server.name;
+        name.append(icon, text);
+        const meta = document.createElement("div");
+        meta.className = "server-meta";
+        const category = document.createElement("span");
+        category.className = "tag";
+        category.textContent = server.category || "Allgemein";
+        const state = shownState(server);
+        const stateTag = document.createElement("span");
+        stateTag.className = `tag ${state.key}`;
+        stateTag.textContent = state.text;
+        meta.append(category, stateTag);
+        identity.append(name, meta);
+        const actions = document.createElement("div");
+        actions.className = "card-actions";
+        const fullScreen = document.createElement("button");
+        fullScreen.className = "icon-button";
+        fullScreen.type = "button";
+        fullScreen.title = "Großansicht öffnen";
+        fullScreen.setAttribute("aria-label", `${server.name} als Großansicht öffnen`);
+        fullScreen.textContent = "⛶";
+        fullScreen.addEventListener("click", () => {
+          if (card.requestFullscreen) card.requestFullscreen().catch(() => {});
+        });
+        const open = document.createElement("a");
+        open.className = "open-link";
+        open.href = server.url;
+        open.target = "_blank";
+        open.rel = "noopener noreferrer";
+        open.textContent = "Öffnen ↗";
+        open.setAttribute("aria-label", `${server.name} in neuem Tab öffnen`);
+        actions.append(fullScreen, open);
+        header.append(identity, actions);
+        card.append(header);
+        if (server.description) {
+          const description = document.createElement("p");
+          description.className = "server-description";
+          description.textContent = server.description;
+          card.append(description);
+        }
+        const frame = document.createElement("iframe");
+        frame.dataset.communityUrl = server.url;
+        frame.title = `${server.name} – AMP Community-Seite`;
+        frame.allow = "fullscreen";
+        frame.referrerPolicy = "strict-origin-when-cross-origin";
+        frame.src = cacheBustedUrl(server.url);
+        card.append(frame);
+        return card;
+      }
+
+      function updateCategoryOptions() {
+        const previous = categoryFilter.value;
+        const categories = [...new Set(publicServers.map((server) => server.category || "Allgemein"))].sort((a, b) => a.localeCompare(b, "de"));
+        categoryFilter.replaceChildren();
+        const all = new Option("Alle Kategorien", "all");
+        categoryFilter.add(all);
+        categories.forEach((category) => categoryFilter.add(new Option(category, category)));
+        categoryFilter.value = categories.includes(previous) || previous === "all" ? previous : "all";
+      }
+
+      function renderServers() {
+        clearRefreshTimers();
+        const desiredCategory = categoryFilter.value;
+        const desiredStatus = statusFilter.value;
+        const visible = publicServers.filter((server) => {
+          const categoryMatches = desiredCategory === "all" || server.category === desiredCategory;
+          const state = shownState(server).key;
+          return categoryMatches && (desiredStatus === "all" || desiredStatus === state);
+        });
+        grid.replaceChildren();
+        filterSummary.textContent = `${visible.length} von ${publicServers.length} Servern angezeigt`;
+        if (!visible.length) {
+          nextRefreshAt = 0;
+          updateCountdown();
+          const empty = document.createElement("p");
+          empty.className = "empty";
+          empty.textContent = publicServers.length ? "Für diesen Filter gibt es keine sichtbaren Server." : "Noch keine Server vorhanden. Als Administrator kannst du welche hinzufügen.";
+          grid.append(empty);
+          return;
+        }
+        visible.forEach((server) => grid.append(makeServerCard(server)));
+        scheduleFrameRefresh();
+      }
+
+      function managerStatus(server) {
+        const visibility = server.visibility === "hidden" ? "versteckt" : server.visibility === "maintenance" ? "Wartung" : "öffentlich";
+        const status = server.status === "auto" ? "Community-Status" : server.status;
+        return `${server.category || "Allgemein"} · ${visibility} · ${status}`;
+      }
+
+      function renderAdminList() {
+        manageList.replaceChildren();
+        if (!managedServers.length) {
+          const empty = document.createElement("p");
+          empty.className = "dialog-copy";
+          empty.textContent = "Noch keine Server gespeichert.";
+          manageList.append(empty);
+          return;
+        }
+        managedServers.forEach((server, index) => {
+          const row = document.createElement("div");
+          row.className = "manage-row";
+          const info = document.createElement("div");
+          info.className = "manage-info";
+          const name = document.createElement("div");
+          name.className = "manage-name";
+          name.textContent = server.name;
+          const url = document.createElement("div");
+          url.className = "manage-url";
+          url.textContent = server.url;
+          const flags = document.createElement("div");
+          flags.className = "manage-flags";
+          flags.textContent = managerStatus(server);
+          info.append(name, url, flags);
+          const actions = document.createElement("div");
+          actions.className = "row-actions";
+          const up = managerButton("↑", "Nach oben verschieben", () => moveServer(server.id, -1));
+          up.disabled = index === 0;
+          const down = managerButton("↓", "Nach unten verschieben", () => moveServer(server.id, 1));
+          down.disabled = index === managedServers.length - 1;
+          const edit = managerButton("Bearbeiten", "Server bearbeiten", () => beginEdit(server));
+          const remove = managerButton("Entfernen", "Server entfernen", () => deleteServer(server), "delete");
+          actions.append(up, down, edit, remove);
+          row.append(info, actions);
+          manageList.append(row);
+        });
+      }
+
+      function managerButton(label, title, action, extraClass = "") {
+        const button = document.createElement("button");
+        button.className = `small-button ${extraClass}`.trim();
+        button.type = "button";
+        button.textContent = label;
+        button.title = title;
+        button.addEventListener("click", action);
+        return button;
+      }
+
+      function renderAdminAccounts() {
+        adminList.replaceChildren();
+        administrators.forEach((account) => {
+          const row = document.createElement("div");
+          row.className = "manage-row";
+          const info = document.createElement("div");
+          info.className = "manage-info";
+          const name = document.createElement("div");
+          name.className = "manage-name";
+          name.textContent = account.username;
+          const hint = document.createElement("div");
+          hint.className = "manage-flags";
+          hint.textContent = account.username === admin?.username ? "Aktuell angemeldet" : "Kann die Übersicht verwalten";
+          info.append(name, hint);
+          const remove = managerButton("Entfernen", "Administratorkonto entfernen", () => deleteAdministrator(account), "delete");
+          remove.disabled = account.username === admin?.username || administrators.length <= 1;
+          row.append(info, remove);
+          adminList.append(row);
+        });
+      }
+
+      async function responseMessage(response) {
+        const body = await response.json().catch(() => ({}));
+        return body.error || "Etwas ist schiefgelaufen. Bitte erneut versuchen.";
+      }
+
+      function formatTime(date) {
+        return new Intl.DateTimeFormat("de-DE", { hour: "2-digit", minute: "2-digit", second: "2-digit" }).format(date);
+      }
+
+      function refreshAll() {
+        document.querySelectorAll("iframe[data-community-url]").forEach(refreshFrame);
+        scheduleFrameRefresh();
+        refreshLabel.textContent = `Alle Kacheln aktualisiert um ${formatTime(new Date())}`;
+        updateCountdown();
+      }
+
+      function clearMessages() {
+        serverError.textContent = "";
+        serverSuccess.textContent = "";
+        backupError.textContent = "";
+        backupSuccess.textContent = "";
+        adminError.textContent = "";
+        refreshSettingsError.textContent = "";
+        refreshSettingsSuccess.textContent = "";
+      }
+
+      async function loadPublicServers() {
+        const response = await api("servers", { headers: {} });
+        if (!response.ok) throw new Error(await responseMessage(response));
+        const body = await response.json();
+        publicServers = body.servers;
+        adminDefaultRefreshIntervalSeconds = validRefreshInterval(Number(body.defaultRefreshIntervalSeconds)) ? Number(body.defaultRefreshIntervalSeconds) : DEFAULT_REFRESH_INTERVAL_SECONDS;
+        activeRefreshIntervalSeconds = visitorRefreshInterval() || adminDefaultRefreshIntervalSeconds;
+        updateRefreshSummary();
+        updateCategoryOptions();
+        renderServers();
+        refreshAll();
+      }
+
+      async function loadManagementData() {
+        if (!admin) return;
+        const [serverResponse, adminResponse, settingsResponse] = await Promise.all([api("admin/servers", { headers: {} }), api("admins", { headers: {} }), api("settings", { headers: {} })]);
+        if (!serverResponse.ok) throw new Error(await responseMessage(serverResponse));
+        if (!adminResponse.ok) throw new Error(await responseMessage(adminResponse));
+        if (!settingsResponse.ok) throw new Error(await responseMessage(settingsResponse));
+        managedServers = (await serverResponse.json()).servers;
+        administrators = (await adminResponse.json()).admins;
+        const settings = await settingsResponse.json();
+        document.querySelector("#admin-default-refresh-interval").value = settings.defaultRefreshIntervalSeconds;
+        renderAdminList();
+        renderAdminAccounts();
+      }
+
+      async function reloadAfterChange(message = "") {
+        await loadPublicServers();
+        await loadManagementData();
+        if (message) serverSuccess.textContent = message;
+      }
+
+      async function loadSession() {
+        const response = await api("session", { headers: {} });
+        const session = await response.json();
+        admin = session.authenticated ? { username: session.username } : null;
+        loginForm.hidden = Boolean(admin);
+        manager.hidden = !admin;
+        document.querySelector("#admin-description").textContent = admin ? "Bearbeite alle Einstellungen der öffentlichen Serverübersicht." : "Melde dich mit deinem Administratorkonto an.";
+        document.querySelector("#admin-name").textContent = admin ? `Angemeldet als ${admin.username}` : "";
+        if (admin) await loadManagementData();
+      }
+
+      function resetServerForm() {
+        serverForm.reset();
+        document.querySelector("#server-id").value = "";
+        document.querySelector("#server-category").value = "Allgemein";
+        document.querySelector("#server-visibility").value = "visible";
+        document.querySelector("#server-status").value = "auto";
+        document.querySelector("#server-form-title").textContent = "Server hinzufügen";
+        document.querySelector("#save-server-button").textContent = "Server hinzufügen";
+        document.querySelector("#cancel-edit").hidden = true;
+        serverError.textContent = "";
+      }
+
+      function beginEdit(server) {
+        clearMessages();
+        document.querySelector("#server-id").value = server.id;
+        document.querySelector("#server-name").value = server.name;
+        document.querySelector("#server-category").value = server.category || "Allgemein";
+        document.querySelector("#server-url").value = server.url;
+        document.querySelector("#server-description").value = server.description || "";
+        document.querySelector("#server-visibility").value = server.visibility || "visible";
+        document.querySelector("#server-status").value = server.status || "auto";
+        document.querySelector("#server-form-title").textContent = `„${server.name}“ bearbeiten`;
+        document.querySelector("#save-server-button").textContent = "Änderungen speichern";
+        document.querySelector("#cancel-edit").hidden = false;
+        document.querySelector("#server-name").focus();
+      }
+
+      async function moveServer(id, direction) {
+        clearMessages();
+        const index = managedServers.findIndex((server) => server.id === id);
+        const target = index + direction;
+        if (index < 0 || target < 0 || target >= managedServers.length) return;
+        const ids = managedServers.map((server) => server.id);
+        [ids[index], ids[target]] = [ids[target], ids[index]];
+        const response = await api("servers/order", { method: "POST", body: JSON.stringify({ ids }) });
+        if (!response.ok) return (serverError.textContent = await responseMessage(response));
+        await reloadAfterChange("Reihenfolge gespeichert.");
+      }
+
+      async function deleteServer(server) {
+        clearMessages();
+        if (!window.confirm(`„${server.name}“ wirklich entfernen?`)) return;
+        const response = await api(`servers/${server.id}`, { method: "DELETE" });
+        if (!response.ok) return (serverError.textContent = await responseMessage(response));
+        if (document.querySelector("#server-id").value === server.id) resetServerForm();
+        await reloadAfterChange("Server entfernt.");
+      }
+
+      async function deleteAdministrator(account) {
+        adminError.textContent = "";
+        if (!window.confirm(`Administratorkonto „${account.username}“ wirklich entfernen?`)) return;
+        const response = await api(`admins/${encodeURIComponent(account.username)}`, { method: "DELETE" });
+        if (!response.ok) return (adminError.textContent = await responseMessage(response));
+        await loadManagementData();
+      }
+
+      document.querySelector("#admin-button").addEventListener("click", async () => {
+        loginError.textContent = "";
+        clearMessages();
+        try {
+          await loadSession();
+          adminDialog.showModal();
+          if (!admin) document.querySelector("#username").focus();
+        } catch (error) {
+          loginError.textContent = error.message;
+          adminDialog.showModal();
+        }
+      });
+      document.querySelector("#close-admin").addEventListener("click", () => adminDialog.close());
+      refreshButton.addEventListener("click", refreshAll);
+      visitorRefreshInput.addEventListener("change", () => applyVisitorRefreshInterval(Number(visitorRefreshInput.value)));
+      useAdminRefreshDefaultButton.addEventListener("click", useAdminRefreshDefault);
+      categoryFilter.addEventListener("change", renderServers);
+      statusFilter.addEventListener("change", renderServers);
+      document.querySelector("#cancel-edit").addEventListener("click", resetServerForm);
+
+      loginForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        loginError.textContent = "";
+        const form = new FormData(loginForm);
+        const response = await api("login", { method: "POST", body: JSON.stringify({ username: form.get("username"), password: form.get("password") }) });
+        if (!response.ok) return (loginError.textContent = await responseMessage(response));
+        loginForm.reset();
+        await loadSession();
+      });
+
+      serverForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        clearMessages();
+        const submit = document.querySelector("#save-server-button");
+        const serverId = document.querySelector("#server-id").value;
+        const payload = {
+          name: document.querySelector("#server-name").value,
+          category: document.querySelector("#server-category").value,
+          url: document.querySelector("#server-url").value,
+          description: document.querySelector("#server-description").value,
+          visibility: document.querySelector("#server-visibility").value,
+          status: document.querySelector("#server-status").value
+        };
+        submit.disabled = true;
+        const original = submit.textContent;
+        submit.textContent = "Wird gespeichert …";
+        try {
+          const response = await api(serverId ? `servers/${serverId}` : "servers", { method: serverId ? "PATCH" : "POST", body: JSON.stringify(payload) });
+          if (!response.ok) return (serverError.textContent = await responseMessage(response));
+          resetServerForm();
+          await reloadAfterChange(serverId ? "Änderungen gespeichert." : "Server hinzugefügt.");
+        } finally {
+          submit.disabled = false;
+          submit.textContent = document.querySelector("#server-id").value ? "Änderungen speichern" : original === "Änderungen speichern" ? "Server hinzufügen" : original;
+        }
+      });
+
+      refreshSettingsForm.addEventListener("submit", async (event) => {
+        event.preventDefault();
+        refreshSettingsError.textContent = "";
+        refreshSettingsSuccess.textContent = "";
+        const response = await api("settings", { method: "POST", body: JSON.stringify({ defaultRefreshIntervalSeconds: Number(document.querySelector("#admin-default-refresh-interval").value) }) });
+        if (!response.ok) return (refreshSettingsError.textContent = await responseMessage(response));
+        const settings = await response.json();
+        adminDefaultRefreshIntervalSeconds = settings.defaultRefreshIntervalSeconds;
+        document.querySelector("#admin-default-refresh-interval").value = adminDefaultRefreshIntervalSeconds;
+        if (visitorRefreshInterval() === null) {
+          activeRefreshIntervalSeconds = adminDefaultRefreshIntervalSeconds;
+          scheduleFrameRefresh();
+        }
+        updateRefreshSummary();
+        refreshSettingsSuccess.textContent = "Standard-Aktualisierung gespeichert.";
+      });
+
+      document.querySelector("#export-button").addEventListener("click", () => { window.location.assign("api/export"); });
+      document.querySelector("#import-file").addEventListener("change", async (event) => {
+        clearMessages();
+        const file = event.target.files?.[0];
+        event.target.value = "";
+        if (!file) return;
+        try {
+          const backup = JSON.parse(await file.text());
+          const count = Array.isArray(backup?.servers) ? backup.servers.length : null;
+          if (count === null) throw new Error("Diese Datei enthält keine Serverliste.");
+          if (!window.confirm(`Die aktuelle Serverliste wird durch ${count} Server aus der Sicherung ersetzt. Fortfahren?`)) return;
+          const response = await api("import", { method: "POST", body: JSON.stringify({ servers: backup.servers }) });
+          if (!response.ok) throw new Error(await responseMessage(response));
+          resetServerForm();
+          await reloadAfterChange();
+          backupSuccess.textContent = `${count} Server wurden aus der Sicherung übernommen.`;
+        } catch (error) {
+          backupError.textContent = error.message || "Die Sicherung konnte nicht importiert werden.";
+        }
+      });
+
+      document.querySelector("#admin-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        adminError.textContent = "";
+        const username = document.querySelector("#new-admin-username").value;
+        const password = document.querySelector("#new-admin-password").value;
+        const response = await api("admins", { method: "POST", body: JSON.stringify({ username, password }) });
+        if (!response.ok) return (adminError.textContent = await responseMessage(response));
+        event.currentTarget.reset();
+        await loadManagementData();
+      });
+
+      document.querySelector("#logout-button").addEventListener("click", async () => {
+        const response = await api("logout", { method: "POST", body: "{}" });
+        if (!response.ok) return;
+        admin = null;
+        managedServers = [];
+        administrators = [];
+        resetServerForm();
+        await loadSession();
+      });
+
+      window.setInterval(() => { if (!document.hidden) updateCountdown(); }, 250);
+      document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshAll(); });
+
+      loadPublicServers().catch((error) => {
+        const empty = document.createElement("p");
+        empty.className = "empty";
+        empty.textContent = `Die Serverübersicht konnte nicht geladen werden: ${error.message}`;
+        grid.replaceChildren(empty);
+      });
+    </script>
+  </body>
+</html>

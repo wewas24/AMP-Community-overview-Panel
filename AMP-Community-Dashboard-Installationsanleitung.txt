@@ -1,0 +1,272 @@
+# AMP-Community-Dashboard – Beispielinstallation
+
+Diese Anleitung beschreibt genau den Aufbau dieser Installation:
+
+- Ubuntu Server 22.04 (Jammy)
+- CubeCoders AMP läuft bereits auf `amp.example.com`
+- AMP wird durch Nginx an `127.0.0.1:8080` weitergeleitet
+- HTTPS-Zertifikat wird bereits von Certbot verwaltet
+- Das Dashboard läuft zusätzlich unter `https://amp.example.com/uebersicht/`
+- Das Dashboard selbst läuft nur lokal auf `127.0.0.1:3100`
+
+AMP bleibt dabei unverändert auf `https://amp.example.com/` erreichbar. Die neue Übersicht ersetzt AMP nicht.
+
+## Vorher prüfen
+
+Die folgenden Befehle werden als `root` ausgeführt. Die Eingabeaufforderung sieht dann ungefähr so aus:
+
+```
+root@amp-server:~#
+```
+
+Prüfe zuerst, ob AMP und Nginx bereits laufen:
+
+```bash
+systemctl status nginx --no-pager
+curl -I https://amp.example.com/
+```
+
+Für die öffentliche Übersicht müssen die Ports 80 und 443 offen sein. Port **3100 darf nicht** in der Firewall geöffnet werden – er wird nur von Nginx auf demselben Server verwendet.
+
+## 1. Node.js 22 installieren
+
+Das Dashboard braucht Node.js 20 oder neuer. Die Ubuntu-Standardversion auf diesem Server war `v12.22.9` und ist zu alt.
+
+Auf diesem System war ein altes, nicht mehr funktionierendes Certbot-PPA eingetragen. Wenn `apt update` genau diesen Fehler zeigt:
+
+```
+ppa.launchpadcontent.net/certbot/certbot/ubuntu jammy Release
+```
+
+deaktiviere nur dieses veraltete PPA:
+
+```bash
+mv /etc/apt/sources.list.d/certbot-ubuntu-certbot-jammy.list /etc/apt/sources.list.d/certbot-ubuntu-certbot-jammy.list.disabled
+```
+
+Das vorhandene Zertifikat bleibt dadurch erhalten. Das PPA muss nicht wieder aktiviert werden, weil es für Jammy keine gültige Paketquelle mehr bereitstellt.
+
+Danach Node.js 22 installieren:
+
+```bash
+apt update
+apt install -y curl ca-certificates unzip
+curl -fsSL https://deb.nodesource.com/setup_22.x -o nodesource_setup.sh
+bash nodesource_setup.sh
+apt-get install -y nodejs
+node --version
+```
+
+Die Ausgabe muss mit `v22` oder neuer beginnen.
+
+## 2. Dashboard nach /opt kopieren
+
+Lade `amp-community-dashboard-gesamtpaket.zip` auf den Server hoch, zum Beispiel direkt nach `/opt/`. Der Transfer kann mit WinSCP oder per SFTP erfolgen.
+
+Dann entpacken:
+
+```bash
+mkdir -p /opt/amp-community-dashboard
+unzip -o /opt/amp-community-dashboard-gesamtpaket.zip -d /opt/amp-community-dashboard
+cd /opt/amp-community-dashboard
+```
+
+Der Ordner darf **nicht** nach `/opt/cubecoders/amp/shared/WebRoot`. Dieser AMP-Webroot ist nur für statische Dateien vorgesehen; das Dashboard benötigt zusätzlich seinen eigenen Node.js-Dienst.
+
+## 3. Admin-Konto anlegen
+
+Im Dashboard-Ordner einmalig ausführen:
+
+```bash
+cd /opt/amp-community-dashboard
+node create-admin.mjs
+```
+
+Benutzername und ein Passwort mit mindestens zwölf Zeichen eingeben. Bei der Passworteingabe erscheinen keine Zeichen – das ist richtig.
+
+Die Zugangsdaten liegen danach als Passwort-Hash unter:
+
+```
+/opt/amp-community-dashboard/data/admins.json
+```
+
+Die Datei darf nicht öffentlich erreichbar sein. Sie gehört deshalb in den Dashboard-Ordner und nicht in den AMP-Webroot.
+
+## 4. Dauerhaften Dienst einrichten
+
+Damit das Dashboard auch nach dem Schließen des Terminals und nach einem Serverneustart weiterläuft, wird der mitgelieferte Dienst verwendet:
+
+```bash
+id amp
+cd /opt/amp-community-dashboard
+chown -R amp:amp /opt/amp-community-dashboard
+cp amp-community-dashboard.service /etc/systemd/system/
+systemctl daemon-reload
+systemctl enable --now amp-community-dashboard
+systemctl status amp-community-dashboard --no-pager
+```
+
+Die letzte Ausgabe muss `active (running)` enthalten.
+
+Der Dienst verwendet diese Einstellungen:
+
+| Einstellung | Wert |
+| --- | --- |
+| Linux-Benutzer | `amp` |
+| Dashboard-Ordner | `/opt/amp-community-dashboard` |
+| Interne Adresse | `127.0.0.1:3100` |
+| Startdatei | `server.mjs` |
+
+Falls `id amp` keinen Benutzer findet, existiert auf diesem Server keine Standard-AMP-Benutzerkennung. Dann entweder den in der Dienstdatei eingetragenen Benutzer anpassen oder einmalig diesen Benutzer anlegen:
+
+```bash
+useradd --system --home /opt/amp-community-dashboard --shell /usr/sbin/nologin amp
+chown -R amp:amp /opt/amp-community-dashboard
+systemctl restart amp-community-dashboard
+```
+
+## 5. Nginx-Konfiguration ergänzen
+
+Bei dieser Installation liegt die AMP-Nginx-Datei hier:
+
+```
+/etc/nginx/conf.d/amp.example.com.conf
+```
+
+Vor der Änderung eine Sicherung erstellen:
+
+```bash
+cp /etc/nginx/conf.d/amp.example.com.conf /etc/nginx/conf.d/amp.example.com.conf.backup
+nano /etc/nginx/conf.d/amp.example.com.conf
+```
+
+In dieser Datei gibt es bereits einen HTTPS-`server {`-Block mit einem großen `location / {`-Bereich, der AMP an `127.0.0.1:8080` weiterleitet.
+
+Füge den folgenden Abschnitt **im selben ersten `server {`-Block** ein: nach dem vollständigen `location / {`-Block und vor den Zeilen `listen 443 ssl ...`.
+
+```nginx
+location /uebersicht/ {
+    proxy_pass http://127.0.0.1:3100/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_cookie_path / /uebersicht/;
+}
+```
+
+Der vorhandene AMP-Bereich bleibt dabei unverändert:
+
+```nginx
+location / {
+    proxy_pass http://127.0.0.1:8080;
+    # … vorhandene AMP-Einstellungen …
+}
+```
+
+Dann Nginx prüfen und die Änderung laden:
+
+```bash
+nginx -t
+systemctl reload nginx
+```
+
+Wenn `nginx -t` einen Fehler meldet, nicht neu laden. Öffne die Sicherung und korrigiere zuerst die Datei.
+
+## 6. Dashboard öffnen
+
+Danach ist die Übersicht hier verfügbar:
+
+```
+https://amp.example.com/uebersicht/
+```
+
+Oben rechts auf **Verwalten** klicken und mit dem Admin-Konto anmelden.
+
+Im Adminbereich lassen sich Server hinzufügen, bearbeiten und sortieren. Zusätzlich sind Kategorien, Beschreibungen, Wartungsmodus, Sicherungen und weitere Admin-Konten verfügbar.
+
+Alle eingebetteten Community-Seiten verwenden denselben Aktualisierungsrhythmus. Der Admin legt den Standard fest; jeder Besucher kann ihn nur für seinen eigenen Browser ändern. Die aktuelle AMP- bzw. Spielserver-Information kommt weiterhin von der jeweiligen Community-Seite.
+
+## Server anderer AMP-Installationen hinzufügen
+
+Es sind nicht nur Links von `amp.example.com` erlaubt. Im Feld **„AMP- oder Community-Adresse“** kann jede öffentliche HTTPS-Adresse eingetragen werden, zum Beispiel:
+
+```
+https://andere-domain.de/c/abc12345
+https://andere-domain.de:8080/
+```
+
+Der Community-Link ist für eine öffentliche Statusübersicht normalerweise die bessere Wahl. Wenn die direkte AMP-Adresse eine Anmeldung verlangt, sehen Besucher in der Kachel auch diese Anmeldung.
+
+Die Zielseite muss HTTPS unterstützen und das Einbetten erlauben. Blockiert der fremde Server das Einbetten, kann das nur dort geändert werden.
+
+## Dashboard aktualisieren
+
+Zuerst die gespeicherten Daten sichern:
+
+```bash
+cp -a /opt/amp-community-dashboard/data /opt/amp-community-dashboard/data.backup
+```
+
+Lade dann eine Update-Datei, zum Beispiel `amp-community-dashboard-voll-update.zip`, nach `/opt/` hoch und führe aus:
+
+```bash
+cd /opt/amp-community-dashboard
+unzip -o /opt/amp-community-dashboard-voll-update.zip
+chown -R amp:amp /opt/amp-community-dashboard
+systemctl restart amp-community-dashboard
+```
+
+Die Update-Datei enthält keine `data/`-Dateien. Deine Serverliste und Admin-Konten bleiben deshalb erhalten. Danach im Browser `Strg + F5` drücken.
+
+## Fehlerbehebung
+
+### 502 Bad Gateway
+
+Der Dashboard-Dienst läuft nicht oder ist abgestürzt:
+
+```bash
+systemctl status amp-community-dashboard --no-pager
+journalctl -u amp-community-dashboard -n 80 --no-pager
+```
+
+Danach besonders die Node-Version prüfen:
+
+```bash
+node --version
+```
+
+### Dashboard verschwindet beim Schließen des Terminals
+
+Es wurde nur `node server.mjs` gestartet, aber kein dauerhafter Dienst eingerichtet. Schritt 4 ausführen:
+
+```bash
+systemctl enable --now amp-community-dashboard
+```
+
+### Anmeldung funktioniert nicht
+
+Prüfen, dass die URL mit `https://amp.example.com/uebersicht/` beginnt und in Nginx diese Zeile vorhanden ist:
+
+```nginx
+proxy_cookie_path / /uebersicht/;
+```
+
+Danach mit `Strg + F5` neu laden.
+
+### Die Community-Seite wird nicht angezeigt
+
+Die Adresse direkt im Browser öffnen. Funktioniert sie dort, aber nicht in der Übersicht, verbietet ihr Server wahrscheinlich das Einbetten. Die Änderung muss dann bei dieser AMP-Installation erfolgen.
+
+## Für eine andere Domain verwenden
+
+Bei einer Kopie dieser Installation müssen nur diese Werte angepasst werden:
+
+| Hier | Ersetzen durch |
+| --- | --- |
+| `amp.example.com` | eigene AMP-Domain |
+| `/etc/nginx/conf.d/amp.example.com.conf` | die Nginx-Datei der eigenen Domain |
+| `https://amp.example.com/uebersicht/` | öffentliche Dashboard-Adresse der eigenen Domain |
+
+Die Pfade `/opt/amp-community-dashboard`, `127.0.0.1:3100` und der Nginx-`location /uebersicht/`-Block können unverändert übernommen werden.

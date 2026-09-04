@@ -1,0 +1,130 @@
+# AMP-Community-Dashboard – Update-Anleitung
+
+Diese Anleitung gilt, wenn eine neue Dashboard-Funktion als Update-Datei bereitgestellt wird. Sie ist für dieselbe Installation wie in der Installationsanleitung geschrieben:
+
+- Dashboard: `/opt/amp-community-dashboard`
+- Dienst: `amp-community-dashboard`
+- Öffentliche Adresse: `https://amp.example.com/uebersicht/`
+
+Die Befehle werden als `root` ausgeführt.
+
+## Vor jedem Update sichern
+
+Erstelle zuerst eine Sicherung der gespeicherten Server und Administratorkonten:
+
+```bash
+cp -a /opt/amp-community-dashboard/data /opt/amp-community-dashboard/data.backup
+```
+
+Zusätzlich im Dashboard unter **Verwalten → Sicherung → Sicherung herunterladen** eine JSON-Sicherung der Serverliste herunterladen.
+
+Die Sicherung ist wichtig, weil darin Servernamen, Reihenfolge, Kategorien, Wartungsmodus und die Admin-Standardzeit gespeichert werden.
+
+## Update-Datei hochladen
+
+Lade die neue Update-Datei nach `/opt/` hoch. Für dieses Update heißt die Datei:
+
+```
+amp-community-dashboard-update-global-aktualisierung.zip
+```
+
+Das geht zum Beispiel mit WinSCP oder SFTP.
+
+## Update einspielen
+
+```bash
+cd /opt/amp-community-dashboard
+unzip -o /opt/amp-community-dashboard-update-global-aktualisierung.zip
+chown -R amp:amp /opt/amp-community-dashboard
+systemctl restart amp-community-dashboard
+systemctl status amp-community-dashboard --no-pager
+```
+
+Die Statusausgabe muss `active (running)` zeigen.
+
+Danach die Übersicht mit `Strg + F5` neu laden:
+
+```
+https://amp.example.com/uebersicht/
+```
+
+## Nach dem Update prüfen
+
+1. Die öffentliche Übersicht öffnen.
+2. Im Feld **„Alle Kacheln / Sek.“** eine Zeit eingeben, zum Beispiel `30`.
+3. Prüfen, ob die Überschrift die gewählte Zeit für alle Kacheln anzeigt.
+4. Oben rechts **Verwalten** wählen und anmelden.
+5. Unter **„Standard-Aktualisierung“** die Zeit festlegen, die neuen Besuchern vorgeschlagen wird.
+6. Mit **„Admin-Standard“** kann ein Besucher seine eigene Auswahl wieder auf den Admin-Wert zurücksetzen.
+
+Nach dem Update legt das Dashboard automatisch eine Standardzeit von zehn Sekunden an. Bereits gespeicherte Server müssen nicht bearbeitet oder neu angelegt werden.
+
+## Was ein normales Update nicht verändert
+
+Eine reine Update-Datei überschreibt keine `data/`-Dateien. Dadurch bleiben erhalten:
+
+- Administrator-Konten und Passwörter
+- gespeicherte Server
+- Kategorien und Beschreibungen
+- Sortierung
+- Sicherungen
+
+Bei diesem Update wird zusätzlich einmalig `data/settings.json` mit der Admin-Standardzeit angelegt.
+
+Nach einem normalen Update `node create-admin.mjs` **nicht** erneut ausführen. Das ist nur bei einer komplett neuen Installation nötig.
+
+## Wenn ein künftiges Update Nginx oder den Dienst ändert
+
+Die jeweilige Update-Beschreibung sagt ausdrücklich, wenn `nginx-snippet.conf` oder `amp-community-dashboard.service` angepasst werden muss.
+
+In diesem Fall zuerst die aktuelle Konfiguration sichern:
+
+```bash
+cp /etc/nginx/conf.d/amp.example.com.conf /etc/nginx/conf.d/amp.example.com.conf.backup
+cp /etc/systemd/system/amp-community-dashboard.service /etc/systemd/system/amp-community-dashboard.service.backup
+```
+
+Danach nur die beschriebenen Änderungen übernehmen. Bei einer Änderung der Dienstdatei immer anschließend:
+
+```bash
+systemctl daemon-reload
+systemctl restart amp-community-dashboard
+```
+
+Bei einer Nginx-Änderung immer zuerst testen:
+
+```bash
+nginx -t
+systemctl reload nginx
+```
+
+Wenn `nginx -t` einen Fehler meldet, Nginx nicht neu laden.
+
+## Fehler nach einem Update
+
+### 502 Bad Gateway
+
+```bash
+systemctl status amp-community-dashboard --no-pager
+journalctl -u amp-community-dashboard -n 80 --no-pager
+node --version
+```
+
+Node.js muss mindestens Version 20 sein.
+
+### Alte Webseite wird weiterhin gezeigt
+
+Im Browser `Strg + F5` drücken. Das löscht nur den Browser-Cache der Seite, nicht deine Dashboard-Daten.
+
+### Zur vorherigen Version zurückkehren
+
+Bewahre die vorherige Update-Datei auf. Bei Problemen kann sie wieder entpackt und der Dienst neu gestartet werden:
+
+```bash
+cd /opt/amp-community-dashboard
+unzip -o /opt/VORHERIGES-UPDATE.zip
+chown -R amp:amp /opt/amp-community-dashboard
+systemctl restart amp-community-dashboard
+```
+
+Wenn Serverdaten verändert wurden, kann außerdem der Ordner `/opt/amp-community-dashboard/data.backup` wiederhergestellt oder die JSON-Sicherung über den Adminbereich importiert werden.

@@ -1,0 +1,20 @@
+[
+  {
+    "id": "fba52967",
+    "name": "Gameserver 1",
+    "url": "https://games.jmheller.de/c/fba52967",
+    "createdAt": "2026-09-04T00:00:00.000Z"
+  },
+  {
+    "id": "bdf416d8",
+    "name": "Gameserver 2",
+    "url": "https://games.jmheller.de/c/bdf416d8",
+    "createdAt": "2026-09-04T00:00:00.000Z"
+  },
+  {
+    "id": "b41ac1f7",
+    "name": "Gameserver 3",
+    "url": "https://games.jmheller.de/c/b41ac1f7",
+    "createdAt": "2026-09-04T00:00:00.000Z"
+  }
+]
