@@ -1,7 +1,7 @@
 # AMP-Community-Übersicht mit Adminbereich
 
 Diese Anwendung ergänzt AMP, ersetzt es aber nicht. Die öffentliche Übersicht
-läuft unter einer eigenen Adresse 
+läuft unter einer eigenen Adresse wie `https://amp.example.com/uebersicht/`.
 AMP selbst bleibt weiterhin wie bisher über die Startseite geschützt.
 
 ## Was sie kann
@@ -32,9 +32,9 @@ Pakete oder Datenbank.
    `amp-community-dashboard.service` dabei. Dort bei Bedarf nur den Node-Pfad
    anpassen und sie anschließend als systemd-Dienst einrichten.
 4. Den Inhalt von `nginx-snippet.conf` in den bestehenden HTTPS-Serverblock
-   für `games.jmheller.de` übernehmen und Nginx neu laden.
+   für deine AMP-Domain übernehmen und Nginx neu laden.
 
-Danach ist die Übersicht unter `https://games.jmheller.de/uebersicht/`
+Danach ist die Übersicht unter `https://amp.example.com/uebersicht/`
 erreichbar. Die drei bisherigen Community-Seiten sind bereits übernommen.
 
 ## AMP-Webroot
