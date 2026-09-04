@@ -1,7 +1,7 @@
 # AMP-Community-Übersicht mit Adminbereich
 
 Diese Anwendung ergänzt AMP, ersetzt es aber nicht. Die öffentliche Übersicht
-läuft unter einer eigenen Adresse wie `https://games.jmheller.de/uebersicht/`.
+läuft unter einer eigenen Adresse 
 AMP selbst bleibt weiterhin wie bisher über die Startseite geschützt.
 
 ## Was sie kann
