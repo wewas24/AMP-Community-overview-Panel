@@ -186,7 +186,9 @@ Oben rechts auf **Verwalten** klicken und mit dem Admin-Konto anmelden.
 
 Im Adminbereich lassen sich Server hinzufügen, bearbeiten und sortieren. Zusätzlich sind Kategorien, Beschreibungen, Wartungsmodus, Sicherungen und weitere Admin-Konten verfügbar.
 
-Für die automatische Online-/Offline-Kategorie beim Hinzufügen oder Bearbeiten eines Servers auf **„Aus Connect übernehmen“** klicken. Bei Community-Seiten auf derselben Domain liest das Dashboard die dort angezeigte Spielserver-Adresse samt Port ein. Nach dem Speichern prüft der Dashboard-Dienst den TCP-Port zentral alle 30 Sekunden. Ein erreichbarer Port wird als **Online**, ein sicher geschlossener Port als **Offline** und nicht eindeutig prüfbare Verbindungen als **Unbekannt** angezeigt. Ein Spieltyp oder AMP-Passwort ist nicht erforderlich.
+Für die automatische Online-/Offline-Kategorie beim Hinzufügen oder Bearbeiten eines Servers auf **„Aus Connect übernehmen“** klicken. Bei Community-Seiten auf derselben Domain liest das Dashboard die dort angezeigte Spielserver-Adresse samt Port ein. Nach dem Speichern prüft der Dashboard-Dienst zentral alle 30 Sekunden: TCP-Ports, Steam-Abfragen auf dem Zielport sowie `+1` (für Arma üblich) und bei TeamSpeak-Voice-Ports die optionale ServerQuery-Abfrage. Ein Spieltyp oder AMP-Passwort ist nicht erforderlich. Ein erreichbarer Dienst wird als **Online**, ein sicher geschlossener TCP-Port als **Offline** und nicht eindeutig prüfbare Verbindungen als **Unbekannt** angezeigt.
+
+Für TeamSpeak muss der optionale ServerQuery-Port erreichbar sein (standardmäßig TCP `10011`), damit die automatische Prüfung den Voice-Server sicher als Online erkennen kann. Ist dieser Port absichtlich deaktiviert oder von außen blockiert, zeigt die Übersicht fairerweise **Unbekannt**. Der Webseitenname kann im Adminbereich unter **„Seiteneinstellungen“** geändert werden.
 
 Alle eingebetteten Community-Seiten verwenden denselben Aktualisierungsrhythmus. Der Admin legt den Standard fest; jeder Besucher kann ihn nur für seinen eigenen Browser ändern. Die aktuelle AMP- bzw. Spielserver-Information kommt weiterhin von der jeweiligen Community-Seite.
 

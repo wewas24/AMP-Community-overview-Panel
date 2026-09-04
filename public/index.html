@@ -82,7 +82,8 @@
       .connection-heading p { margin:3px 0 0; color:var(--muted); font-size:.75rem; line-height:1.4; }
       .connection-grid { display:grid; grid-template-columns:minmax(0,1fr) 150px; gap:13px; }
       .connection-hint { min-height:1.2em; margin:0; color:var(--muted); font-size:.75rem; line-height:1.4; }
-      .error { min-height:1.25em; margin:12px 0 0; color:var(--danger); font-size:.85rem; }
+      .error { min-height:1.25em; margin:12px 0 0; color:var(--danger); font-size:.9rem; font-weight:700; line-height:1.45; }
+      .error:not(:empty) { padding:12px 14px; border:1px solid rgba(255,154,154,.5); border-radius:10px; background:rgba(255,118,118,.12); font-size:1rem; }
       .success { min-height:1.25em; margin:12px 0 0; color:var(--accent); font-size:.85rem; }
       .manager { display:grid; gap:22px; }
       .admin-section { padding:17px; border:1px solid var(--border); border-radius:13px; background:rgba(255,255,255,.025); }
@@ -112,7 +113,7 @@
       <header class="topbar">
         <div>
           <p class="eyebrow"><span class="live-dot" aria-hidden="true"></span> Live-Übersicht</p>
-          <h1>Meine Gameserver</h1>
+          <h1 id="site-title">Meine Gameserver</h1>
           <p class="intro">Status, Spieler und Infos aller Server auf einen Blick. Spielserver werden zentral alle 30 Sekunden auf Erreichbarkeit geprüft.</p>
         </div>
         <div class="controls" aria-live="polite">
@@ -175,8 +176,8 @@
           </form>
 
           <form class="admin-section" id="refresh-settings-form">
-            <div class="section-heading"><div><h3>Standard-Aktualisierung</h3><p>Dieser Wert wird neuen Besuchern vorgeschlagen. Jeder Besucher kann ihn für seinen Browser ändern.</p></div></div>
-            <div class="form-grid one"><label>Standardzeit (Sekunden) <input id="admin-default-refresh-interval" type="number" min="5" max="3600" step="1" value="10" required /></label></div>
+            <div class="section-heading"><div><h3>Seiteneinstellungen</h3><p>Der Webseitenname gilt für alle Besucher. Die Aktualisierungszeit wird neuen Besuchern vorgeschlagen.</p></div></div>
+            <div class="form-grid"><label>Webseitenname <input id="admin-site-title" maxlength="70" minlength="3" value="Meine Gameserver" required /></label><label>Standardzeit (Sekunden) <input id="admin-default-refresh-interval" type="number" min="5" max="3600" step="1" value="10" required /></label></div>
             <div class="form-actions"><button class="button" type="submit">Standard speichern</button></div>
             <p class="error" id="refresh-settings-error" aria-live="polite"></p>
             <p class="success" id="refresh-settings-success" aria-live="polite"></p>
@@ -213,6 +214,7 @@
     <script>
       const DEFAULT_REFRESH_INTERVAL_SECONDS = 10;
       const grid = document.querySelector("#server-grid");
+      const siteTitleElement = document.querySelector("#site-title");
       const refreshButton = document.querySelector("#refresh-button");
       const refreshLabel = document.querySelector("#refresh-label");
       const countdownLabel = document.querySelector("#countdown-label");
@@ -297,6 +299,12 @@
         refreshLabel.textContent = `Alle Kacheln: alle ${activeRefreshIntervalSeconds} Sek.`;
         updateCountdown();
         visitorRefreshInput.value = activeRefreshIntervalSeconds;
+      }
+
+      function applySiteTitle(value) {
+        const title = typeof value === "string" && value.trim().length >= 3 ? value.trim() : "Meine Gameserver";
+        siteTitleElement.textContent = title;
+        document.title = title;
       }
 
       function updateCountdown() {
@@ -576,6 +584,7 @@
         if (!response.ok) throw new Error(await responseMessage(response));
         const body = await response.json();
         publicServers = body.servers;
+        applySiteTitle(body.siteTitle);
         adminDefaultRefreshIntervalSeconds = validRefreshInterval(Number(body.defaultRefreshIntervalSeconds)) ? Number(body.defaultRefreshIntervalSeconds) : DEFAULT_REFRESH_INTERVAL_SECONDS;
         activeRefreshIntervalSeconds = visitorRefreshInterval() || adminDefaultRefreshIntervalSeconds;
         updateRefreshSummary();
@@ -602,6 +611,7 @@
         managedServers = (await serverResponse.json()).servers;
         administrators = (await adminResponse.json()).admins;
         const settings = await settingsResponse.json();
+        document.querySelector("#admin-site-title").value = settings.siteTitle;
         document.querySelector("#admin-default-refresh-interval").value = settings.defaultRefreshIntervalSeconds;
         renderAdminList();
         renderAdminAccounts();
@@ -832,9 +842,11 @@
         event.preventDefault();
         refreshSettingsError.textContent = "";
         refreshSettingsSuccess.textContent = "";
-        const response = await api("settings", { method: "POST", body: JSON.stringify({ defaultRefreshIntervalSeconds: Number(document.querySelector("#admin-default-refresh-interval").value) }) });
+        const response = await api("settings", { method: "POST", body: JSON.stringify({ siteTitle: document.querySelector("#admin-site-title").value, defaultRefreshIntervalSeconds: Number(document.querySelector("#admin-default-refresh-interval").value) }) });
         if (!response.ok) return (refreshSettingsError.textContent = await responseMessage(response));
         const settings = await response.json();
+        applySiteTitle(settings.siteTitle);
+        document.querySelector("#admin-site-title").value = settings.siteTitle;
         adminDefaultRefreshIntervalSeconds = settings.defaultRefreshIntervalSeconds;
         document.querySelector("#admin-default-refresh-interval").value = adminDefaultRefreshIntervalSeconds;
         if (visitorRefreshInterval() === null) {

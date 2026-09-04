@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { createSocket } from "node:dgram";
 import { connect, isIP } from "node:net";
 import { extname, resolve, sep } from "node:path";
 
@@ -20,8 +21,10 @@ const maxLoginAttempts = 5;
 const maxServers = 100;
 const maxAdmins = 20;
 const defaultRefreshIntervalSeconds = 10;
+const defaultSiteTitle = "Meine Gameserver";
 const gameStatusIntervalMs = 30_000;
 const gameStatusTimeoutMs = 3_500;
+const teamSpeakQueryPort = 10011;
 const sessions = new Map();
 const loginAttempts = new Map();
 const availabilityByServer = new Map();
@@ -101,6 +104,18 @@ function refreshIntervalFromInput(value) {
     throw new Error("Die Aktualisierungszeit muss zwischen 5 und 3.600 Sekunden liegen.");
   }
   return seconds;
+}
+
+function normalizeSiteTitle(value, fallback = defaultSiteTitle) {
+  return cleanText(value, fallback, 70);
+}
+
+function siteTitleFromInput(value, fallback = defaultSiteTitle) {
+  const title = typeof value === "string" ? value.trim() : "";
+  if (title.length < 3 || title.length > 70) {
+    throw new Error("Der Webseitenname muss zwischen 3 und 70 Zeichen lang sein.");
+  }
+  return title;
 }
 
 function cleanGameHost(value) {
@@ -286,6 +301,89 @@ function probeTcpConnection(connection) {
   });
 }
 
+function probeUdpConnection(connection, port, payload, acceptsResponse, successDetail) {
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    let done = false;
+    let socket;
+    try {
+      socket = createSocket(isIP(connection.host) === 6 ? "udp6" : "udp4");
+    } catch {
+      return resolve({ state: "unknown", detail: "Die UDP-Abfrage konnte nicht vorbereitet werden.", checkedAt: new Date().toISOString() });
+    }
+    const finish = (state, detail) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timeout);
+      socket.close();
+      resolve({ state, detail, checkedAt: new Date().toISOString(), latencyMs: Date.now() - startedAt });
+    };
+    const timeout = setTimeout(() => finish("unknown", "Die UDP-Abfrage hat nicht geantwortet."), gameStatusTimeoutMs);
+    timeout.unref?.();
+    socket.once("message", (message) => {
+      if (acceptsResponse(message)) finish("online", successDetail);
+    });
+    socket.once("error", () => finish("unknown", "Die UDP-Abfrage konnte nicht eindeutig geprüft werden."));
+    socket.send(payload, port, connection.host, (error) => {
+      if (error) finish("unknown", "Die UDP-Abfrage konnte nicht gesendet werden.");
+    });
+  });
+}
+
+function probeSteamQuery(connection, port) {
+  const payload = Buffer.concat([Buffer.from([0xff, 0xff, 0xff, 0xff, 0x54]), Buffer.from("Source Engine Query\0")]);
+  return probeUdpConnection(
+    connection,
+    port,
+    payload,
+    (message) => message.length >= 5 && (message.readInt32LE(0) === -1 || message.readInt32LE(0) === -2),
+    "Der Server antwortet auf eine Steam-Abfrage."
+  );
+}
+
+function probeTeamSpeakQuery(connection) {
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    let done = false;
+    const socket = connect({ host: connection.host, port: teamSpeakQueryPort });
+    const finish = (state, detail) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timeout);
+      socket.destroy();
+      resolve({ state, detail, checkedAt: new Date().toISOString(), latencyMs: Date.now() - startedAt });
+    };
+    const timeout = setTimeout(() => finish("unknown", "Die TeamSpeak-Abfrage hat nicht geantwortet."), gameStatusTimeoutMs);
+    timeout.unref?.();
+    socket.once("data", (message) => {
+      const greeting = message.toString("utf8");
+      if (greeting.includes("TS3") || greeting.includes("TeamSpeak")) finish("online", "Der TeamSpeak-Server antwortet auf ServerQuery.");
+      else finish("unknown", "Die TeamSpeak-Abfrage lieferte keine erkennbare Antwort.");
+    });
+    socket.once("error", () => finish("unknown", "Der TeamSpeak-Query-Port ist nicht erreichbar oder deaktiviert."));
+  });
+}
+
+function isLikelyTeamSpeakVoicePort(port) {
+  return Number.isInteger(port) && port >= 9987 && port <= 9999;
+}
+
+async function probeGameConnection(connection) {
+  const checks = [probeTcpConnection(connection), probeSteamQuery(connection, connection.port)];
+  if (connection.port < 65535) checks.push(probeSteamQuery(connection, connection.port + 1));
+  if (isLikelyTeamSpeakVoicePort(connection.port)) checks.push(probeTeamSpeakQuery(connection));
+  const results = await Promise.all(checks);
+  const online = results.find((result) => result.state === "online");
+  if (online) return online;
+  if (isLikelyTeamSpeakVoicePort(connection.port)) {
+    return { state: "unknown", detail: "Der TeamSpeak-Voice-Port antwortet nicht auf allgemeine Abfragen und ServerQuery ist nicht erreichbar.", checkedAt: new Date().toISOString() };
+  }
+  const tcpResult = results[0];
+  return tcpResult.state === "offline"
+    ? tcpResult
+    : { state: "unknown", detail: "Der Server konnte mit den verfügbaren TCP- und UDP-Abfragen nicht eindeutig geprüft werden.", checkedAt: new Date().toISOString() };
+}
+
 async function refreshGameStatuses() {
   if (availabilityRefresh) return availabilityRefresh;
   availabilityRefresh = (async () => {
@@ -297,7 +395,7 @@ async function refreshGameStatuses() {
         return;
       }
       availabilityByServer.set(server.id, { state: "checking", checkedAt: new Date().toISOString(), detail: "Spielserver wird geprüft." });
-      availabilityByServer.set(server.id, await probeTcpConnection(server.connection));
+      availabilityByServer.set(server.id, await probeGameConnection(server.connection));
     }));
     for (const id of availabilityByServer.keys()) {
       if (!activeIds.has(id)) availabilityByServer.delete(id);
@@ -316,7 +414,21 @@ function triggerGameStatusRefresh() {
 
 async function getSettings() {
   const settings = await readJson(settingsFile, {});
-  return { defaultRefreshIntervalSeconds: normalizeRefreshInterval(settings?.defaultRefreshIntervalSeconds) };
+  return {
+    defaultRefreshIntervalSeconds: normalizeRefreshInterval(settings?.defaultRefreshIntervalSeconds),
+    siteTitle: normalizeSiteTitle(settings?.siteTitle)
+  };
+}
+
+function settingsFromInput(input, fallback) {
+  return {
+    defaultRefreshIntervalSeconds: input?.defaultRefreshIntervalSeconds === undefined
+      ? fallback.defaultRefreshIntervalSeconds
+      : refreshIntervalFromInput(input.defaultRefreshIntervalSeconds),
+    siteTitle: input?.siteTitle === undefined
+      ? fallback.siteTitle
+      : siteTitleFromInput(input.siteTitle, fallback.siteTitle)
+  };
 }
 
 async function getAdmins() {
@@ -334,7 +446,7 @@ async function getAdmins() {
 async function ensureDataFiles() {
   await mkdir(dataDirectory, { recursive: true });
   if (await readJson(serverFile, null) === null) await writeJson(serverFile, []);
-  if (await readJson(settingsFile, null) === null) await writeJson(settingsFile, { defaultRefreshIntervalSeconds });
+  if (await readJson(settingsFile, null) === null) await writeJson(settingsFile, { defaultRefreshIntervalSeconds, siteTitle: defaultSiteTitle });
 }
 
 function getCookie(request, name) {
@@ -501,7 +613,7 @@ async function handleApi(request, response, url) {
 
   if (request.method === "POST" && path === "/api/settings") {
     const body = await requestBody(request, 8_192);
-    const settings = { defaultRefreshIntervalSeconds: refreshIntervalFromInput(body?.defaultRefreshIntervalSeconds) };
+    const settings = settingsFromInput(body, await getSettings());
     await writeJson(settingsFile, settings);
     return sendJson(response, 200, settings);
   }
@@ -547,7 +659,7 @@ async function handleApi(request, response, url) {
       return server;
     });
     const settings = body?.settings && typeof body.settings === "object"
-      ? { defaultRefreshIntervalSeconds: refreshIntervalFromInput(body.settings.defaultRefreshIntervalSeconds) }
+      ? settingsFromInput(body.settings, await getSettings())
       : await getSettings();
     const saved = await saveServers(imported);
     await writeJson(settingsFile, settings);

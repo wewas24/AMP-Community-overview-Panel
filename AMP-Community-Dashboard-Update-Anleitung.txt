@@ -56,10 +56,11 @@ https://amp.example.com/uebersicht/
 4. Oben rechts **Verwalten** wählen und anmelden.
 5. Bei einem Server auf **Bearbeiten** gehen und **„Aus Connect übernehmen“** verwenden. Die Community-Seite muss dafür auf derselben Domain wie das Dashboard liegen.
 6. Adresse und Port prüfen, speichern und nach höchstens 30 Sekunden die Status-Kategorie kontrollieren.
-7. Unter **„Standard-Aktualisierung“** die Zeit festlegen, die neuen Besuchern vorgeschlagen wird.
-8. Mit **„Admin-Standard“** kann ein Besucher seine eigene Auswahl wieder auf den Admin-Wert zurücksetzen.
+7. Unter **„Seiteneinstellungen“** den gewünschten Webseitenname speichern.
+8. Unter **„Seiteneinstellungen“** die Zeit festlegen, die neuen Besuchern vorgeschlagen wird.
+9. Mit **„Admin-Standard“** kann ein Besucher seine eigene Auswahl wieder auf den Admin-Wert zurücksetzen.
 
-Nach dem Update legt das Dashboard automatisch eine Standardzeit von zehn Sekunden an. Bereits gespeicherte Server müssen nicht neu angelegt werden. Für die neue automatische Statusanzeige wird einmalig die Spielserver-Adresse samt Port im jeweiligen Bearbeitungsformular übernommen oder manuell eingetragen.
+Nach dem Update legt das Dashboard automatisch eine Standardzeit von zehn Sekunden an. Bereits gespeicherte Server müssen nicht neu angelegt werden. Für die automatische Statusanzeige wird einmalig die Spielserver-Adresse samt Port im jeweiligen Bearbeitungsformular übernommen oder manuell eingetragen. Arma wird zusätzlich über eine Steam-Abfrage am Zielport und am Port `+1` getestet; TeamSpeak wird bei einem Voice-Port über den optionalen ServerQuery-Port geprüft.
 
 ## Was ein normales Update nicht verändert
 
