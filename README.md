@@ -13,6 +13,7 @@ AMP selbst bleibt weiterhin wie bisher über die Startseite geschützt.
 - Community-Seiten hinzufügen, bearbeiten, verstecken, in den Wartungsmodus setzen,
   sortieren und entfernen, ohne Dateien bearbeiten zu müssen.
 - Mehrere Administratorkonten verwalten.
+- Administrative Änderungen mit Benutzername und Zeit im Änderungsprotokoll festhalten; Einträge werden nach sieben Tagen automatisch entfernt.
 - Die Serverliste als Sicherung herunterladen und später wieder importieren.
 - Die Serverliste und die globale Standardzeit dauerhaft in `data/` speichern.
 - Passwörter sicher als Salted-Scrypt-Hash ablegen; Klartext-Passwörter werden

@@ -93,6 +93,10 @@
       .form-actions { display:flex; flex-wrap:wrap; justify-content:flex-end; gap:9px; margin-top:14px; }
       .manage-list { display:grid; gap:8px; }
       .manage-row { display:flex; align-items:center; justify-content:space-between; gap:12px; padding:12px; border:1px solid var(--border); border-radius:11px; }
+      .activity-list { display:grid; gap:8px; }
+      .activity-row { display:grid; gap:4px; padding:12px; border-left:3px solid var(--accent); border-radius:0 10px 10px 0; background:rgba(255,255,255,.025); }
+      .activity-action { font-size:.9rem; font-weight:740; }
+      .activity-detail,.activity-meta { color:var(--muted); font-size:.76rem; line-height:1.4; }
       .manage-info { min-width:0; }
       .manage-name { min-width:0; font-size:.92rem; font-weight:740; }
       .manage-url { overflow:hidden; margin-top:3px; color:var(--muted); font-size:.74rem; text-overflow:ellipsis; white-space:nowrap; }
@@ -199,6 +203,11 @@
           </section>
 
           <section class="admin-section">
+            <div class="section-heading"><div><h3>Änderungsprotokoll</h3><p>Zeigt administrative Änderungen. Einträge werden nach sieben Tagen automatisch gelöscht.</p></div></div>
+            <div class="activity-list" id="activity-list"></div>
+          </section>
+
+          <section class="admin-section">
             <div class="section-heading"><div><h3>Sicherung</h3><p>Export speichert deine Serverliste. Ein Import ersetzt anschließend die gesamte Serverliste.</p></div></div>
             <div class="form-actions"><input class="visually-hidden" id="import-file" type="file" accept="application/json,.json" /><label class="button secondary" for="import-file">Sicherung importieren</label><button class="button warning" id="export-button" type="button">Sicherung herunterladen</button></div>
             <p class="error" id="backup-error" aria-live="polite"></p>
@@ -241,6 +250,7 @@
       const serverForm = document.querySelector("#server-form");
       const refreshSettingsForm = document.querySelector("#refresh-settings-form");
       const manageList = document.querySelector("#manage-list");
+      const activityList = document.querySelector("#activity-list");
       const adminList = document.querySelector("#admin-list");
       const loginError = document.querySelector("#login-error");
       const serverError = document.querySelector("#server-error");
@@ -259,6 +269,7 @@
       let publicServers = [];
       let managedServers = [];
       let administrators = [];
+      let activityEntries = [];
       let refreshTimer = null;
       let nextRefreshAt = 0;
       let adminDefaultRefreshIntervalSeconds = DEFAULT_REFRESH_INTERVAL_SECONDS;
@@ -570,6 +581,33 @@
         });
       }
 
+      function renderActivityLog() {
+        activityList.replaceChildren();
+        if (!activityEntries.length) {
+          const empty = document.createElement("p");
+          empty.className = "dialog-copy";
+          empty.textContent = "In den letzten sieben Tagen wurden keine Änderungen protokolliert.";
+          activityList.append(empty);
+          return;
+        }
+        activityEntries.forEach((entry) => {
+          const row = document.createElement("div");
+          row.className = "activity-row";
+          const action = document.createElement("div");
+          action.className = "activity-action";
+          action.textContent = entry.action;
+          const detail = document.createElement("div");
+          detail.className = "activity-detail";
+          detail.textContent = entry.detail || "Keine weiteren Angaben";
+          const meta = document.createElement("div");
+          meta.className = "activity-meta";
+          const when = new Intl.DateTimeFormat("de-DE", { dateStyle: "medium", timeStyle: "medium" }).format(new Date(entry.createdAt));
+          meta.textContent = `${when} · ${entry.username}`;
+          row.append(action, detail, meta);
+          activityList.append(row);
+        });
+      }
+
       async function responseMessage(response) {
         const body = await response.json().catch(() => ({}));
         return body.error || "Etwas ist schiefgelaufen. Bitte erneut versuchen.";
@@ -621,17 +659,20 @@
 
       async function loadManagementData() {
         if (!admin) return;
-        const [serverResponse, adminResponse, settingsResponse] = await Promise.all([api("admin/servers", { headers: {} }), api("admins", { headers: {} }), api("settings", { headers: {} })]);
+        const [serverResponse, adminResponse, settingsResponse, activityResponse] = await Promise.all([api("admin/servers", { headers: {} }), api("admins", { headers: {} }), api("settings", { headers: {} }), api("activity-log", { headers: {} })]);
         if (!serverResponse.ok) throw new Error(await responseMessage(serverResponse));
         if (!adminResponse.ok) throw new Error(await responseMessage(adminResponse));
         if (!settingsResponse.ok) throw new Error(await responseMessage(settingsResponse));
+        if (!activityResponse.ok) throw new Error(await responseMessage(activityResponse));
         managedServers = (await serverResponse.json()).servers;
         administrators = (await adminResponse.json()).admins;
+        activityEntries = (await activityResponse.json()).entries || [];
         const settings = await settingsResponse.json();
         document.querySelector("#admin-site-title").value = settings.siteTitle;
         document.querySelector("#admin-default-refresh-interval").value = settings.defaultRefreshIntervalSeconds;
         renderAdminList();
         renderAdminAccounts();
+        renderActivityLog();
       }
 
       async function reloadAfterChange(message = "") {

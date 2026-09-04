@@ -14,6 +14,7 @@ const dataDirectory = resolve("data");
 const serverFile = resolve(dataDirectory, "servers.json");
 const settingsFile = resolve(dataDirectory, "settings.json");
 const adminsFile = resolve(dataDirectory, "admins.json");
+const activityLogFile = resolve(dataDirectory, "activity-log.json");
 const legacyAdminFile = resolve(dataDirectory, "admin.json");
 const sessionLifetimeMs = 12 * 60 * 60 * 1000;
 const loginWindowMs = 5 * 60 * 1000;
@@ -25,6 +26,8 @@ const defaultSiteTitle = "Meine Gameserver";
 const gameStatusIntervalMs = 30_000;
 const gameStatusTimeoutMs = 3_500;
 const defaultTeamSpeakQueryPort = 10011;
+const activityLogRetentionMs = 7 * 24 * 60 * 60 * 1000;
+const activityLogCleanupIntervalMs = 60 * 60 * 1000;
 const sessions = new Map();
 const loginAttempts = new Map();
 const availabilityByServer = new Map();
@@ -91,6 +94,43 @@ function passwordRecord(password) {
 
 function validPassword(value) {
   return typeof value === "string" && value.length >= 12 && value.length <= 512;
+}
+
+function activityEntryFromStored(input) {
+  if (!input || typeof input !== "object") return null;
+  const createdAt = typeof input.createdAt === "string" && Number.isFinite(Date.parse(input.createdAt)) ? input.createdAt : null;
+  const username = validUsername(input.username) ? input.username : null;
+  const action = cleanText(input.action, "", 100);
+  if (!createdAt || !username || !action) return null;
+  return {
+    id: typeof input.id === "string" && /^[a-zA-Z0-9-]{8,80}$/.test(input.id) ? input.id : randomUUID(),
+    createdAt,
+    username,
+    action,
+    detail: cleanText(input.detail, "", 240)
+  };
+}
+
+function retainedActivityEntries(input) {
+  const oldestAllowed = Date.now() - activityLogRetentionMs;
+  const records = Array.isArray(input) ? input : [];
+  return records
+    .map(activityEntryFromStored)
+    .filter((entry) => entry && Date.parse(entry.createdAt) >= oldestAllowed)
+    .sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt));
+}
+
+async function getActivityLog() {
+  const stored = await readJson(activityLogFile, []);
+  const retained = retainedActivityEntries(stored);
+  if (JSON.stringify(stored) !== JSON.stringify(retained)) await writeJson(activityLogFile, retained);
+  return retained;
+}
+
+async function addActivityLog(username, action, detail = "") {
+  const entries = await getActivityLog();
+  entries.unshift({ id: randomUUID(), createdAt: new Date().toISOString(), username, action: cleanText(action, "Änderung", 100), detail: cleanText(detail, "", 240) });
+  await writeJson(activityLogFile, entries);
 }
 
 function normalizeRefreshInterval(value, fallback = defaultRefreshIntervalSeconds) {
@@ -639,14 +679,22 @@ async function handleApi(request, response, url) {
     return sendJson(response, 200, await getSettings());
   }
 
+  if (request.method === "GET" && path === "/api/activity-log") {
+    return sendJson(response, 200, { entries: await getActivityLog() });
+  }
+
   if (request.method === "GET" && path === "/api/export") {
     return sendJson(response, 200, { version: 4, exportedAt: new Date().toISOString(), settings: await getSettings(), servers: (await getServers()).map(adminServer) }, { "Content-Disposition": "attachment; filename=amp-community-backup.json" });
   }
 
   if (request.method === "POST" && path === "/api/settings") {
     const body = await requestBody(request, 8_192);
-    const settings = settingsFromInput(body, await getSettings());
+    const previous = await getSettings();
+    const settings = settingsFromInput(body, previous);
     await writeJson(settingsFile, settings);
+    if (previous.siteTitle !== settings.siteTitle || previous.defaultRefreshIntervalSeconds !== settings.defaultRefreshIntervalSeconds) {
+      await addActivityLog(session.username, "Seiteneinstellungen geändert", `Webseitenname: ${settings.siteTitle}; Aktualisierung: ${settings.defaultRefreshIntervalSeconds} Sekunden`);
+    }
     return sendJson(response, 200, settings);
   }
 
@@ -658,6 +706,7 @@ async function handleApi(request, response, url) {
     if (servers.some((item) => item.url === server.url)) return sendError(response, 409, "Diese Community-Seite ist bereits gespeichert.");
     servers.push(server);
     await saveServers(servers);
+    await addActivityLog(session.username, "Server hinzugefügt", server.name);
     triggerGameStatusRefresh();
     return sendJson(response, 201, { server: publicServer(server) });
   }
@@ -672,6 +721,7 @@ async function handleApi(request, response, url) {
     const byId = new Map(servers.map((server) => [server.id, server]));
     const ordered = ids.map((id) => byId.get(id));
     const saved = await saveServers(ordered);
+    await addActivityLog(session.username, "Serverreihenfolge geändert", `${saved.length} Server sortiert`);
     return sendJson(response, 200, { servers: saved.map(publicServer) });
   }
 
@@ -695,6 +745,7 @@ async function handleApi(request, response, url) {
       : await getSettings();
     const saved = await saveServers(imported);
     await writeJson(settingsFile, settings);
+    await addActivityLog(session.username, "Sicherung importiert", `${saved.length} Server übernommen`);
     triggerGameStatusRefresh();
     return sendJson(response, 200, { servers: saved.map(publicServer), ...settings });
   }
@@ -711,6 +762,7 @@ async function handleApi(request, response, url) {
     const record = { username, ...passwordRecord(password), createdAt: new Date().toISOString() };
     admins.push(record);
     await writeJson(adminsFile, admins);
+    await addActivityLog(session.username, "Administratorkonto hinzugefügt", username);
     return sendJson(response, 201, { admin: publicAdmin(record) });
   }
 
@@ -723,15 +775,18 @@ async function handleApi(request, response, url) {
     if (servers.some((server) => server.id !== updated.id && server.url === updated.url)) return sendError(response, 409, "Diese Community-Seite ist bereits gespeichert.");
     servers[index] = updated;
     await saveServers(servers);
+    await addActivityLog(session.username, "Server bearbeitet", updated.name);
     triggerGameStatusRefresh();
     return sendJson(response, 200, { server: publicServer(updated) });
   }
 
   if (serverMatch && request.method === "DELETE") {
     const servers = await getServers();
+    const removed = servers.find((server) => server.id === serverMatch[1]);
     const nextServers = servers.filter((server) => server.id !== serverMatch[1]);
     if (nextServers.length === servers.length) return sendError(response, 404, "Server nicht gefunden.");
     await saveServers(nextServers);
+    await addActivityLog(session.username, "Server entfernt", removed.name);
     availabilityByServer.delete(serverMatch[1]);
     return sendJson(response, 200, { ok: true });
   }
@@ -745,6 +800,7 @@ async function handleApi(request, response, url) {
     const nextAdmins = admins.filter((admin) => admin.username !== username);
     if (nextAdmins.length === admins.length) return sendError(response, 404, "Administratorkonto nicht gefunden.");
     await writeJson(adminsFile, nextAdmins);
+    await addActivityLog(session.username, "Administratorkonto entfernt", username);
     for (const [token, activeSession] of sessions) if (activeSession.username === username) sessions.delete(token);
     return sendJson(response, 200, { ok: true });
   }
@@ -769,9 +825,14 @@ async function handleStatic(request, response, url) {
 }
 
 await ensureDataFiles();
+await getActivityLog();
 triggerGameStatusRefresh();
 const gameStatusTimer = setInterval(triggerGameStatusRefresh, gameStatusIntervalMs);
 gameStatusTimer.unref?.();
+const activityLogTimer = setInterval(() => {
+  getActivityLog().catch((error) => console.error("Änderungsprotokoll konnte nicht bereinigt werden:", error));
+}, activityLogCleanupIntervalMs);
+activityLogTimer.unref?.();
 
 const server = createServer(async (request, response) => {
   try {
