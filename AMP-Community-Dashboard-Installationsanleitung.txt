@@ -186,6 +186,8 @@ Oben rechts auf **Verwalten** klicken und mit dem Admin-Konto anmelden.
 
 Im Adminbereich lassen sich Server hinzufügen, bearbeiten und sortieren. Zusätzlich sind Kategorien, Beschreibungen, Wartungsmodus, Sicherungen und weitere Admin-Konten verfügbar.
 
+Für die automatische Online-/Offline-Kategorie beim Hinzufügen oder Bearbeiten eines Servers auf **„Aus Connect übernehmen“** klicken. Bei Community-Seiten auf derselben Domain liest das Dashboard die dort angezeigte Spielserver-Adresse samt Port ein. Nach dem Speichern prüft der Dashboard-Dienst den TCP-Port zentral alle 30 Sekunden. Ein erreichbarer Port wird als **Online**, ein sicher geschlossener Port als **Offline** und nicht eindeutig prüfbare Verbindungen als **Unbekannt** angezeigt. Ein Spieltyp oder AMP-Passwort ist nicht erforderlich.
+
 Alle eingebetteten Community-Seiten verwenden denselben Aktualisierungsrhythmus. Der Admin legt den Standard fest; jeder Besucher kann ihn nur für seinen eigenen Browser ändern. Die aktuelle AMP- bzw. Spielserver-Information kommt weiterhin von der jeweiligen Community-Seite.
 
 ## Server anderer AMP-Installationen hinzufügen
@@ -197,7 +199,7 @@ https://andere-domain.de/c/abc12345
 https://andere-domain.de:8080/
 ```
 
-Der Community-Link ist für eine öffentliche Statusübersicht normalerweise die bessere Wahl. Wenn die direkte AMP-Adresse eine Anmeldung verlangt, sehen Besucher in der Kachel auch diese Anmeldung.
+Der Community-Link ist für eine öffentliche Statusübersicht normalerweise die bessere Wahl. Wenn die direkte AMP-Adresse eine Anmeldung verlangt, sehen Besucher in der Kachel auch diese Anmeldung. Bei einer fremden Domain lässt sich der Connect-Button aus Browser-Sicherheitsgründen nicht automatisch auslesen; die Spielserver-Adresse und der Port können dann im Bearbeitungsformular einmalig manuell eingetragen werden.
 
 Die Zielseite muss HTTPS unterstützen und das Einbetten erlauben. Blockiert der fremde Server das Einbetten, kann das nur dort geändert werden.
 

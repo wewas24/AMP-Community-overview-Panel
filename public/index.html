@@ -50,6 +50,8 @@
       .tag { display:inline-flex; align-items:center; min-height:22px; padding:0 8px; border-radius:99px; color:#d8e4f4; background:rgba(255,255,255,.08); font-size:.69rem; font-weight:720; }
       .tag.online { color:#b9ffe0; background:rgba(69,196,137,.16); }
       .tag.offline { color:#ffd2d2; background:rgba(255,118,118,.16); }
+      .tag.unknown { color:#d6e1f0; background:rgba(159,187,226,.15); }
+      .tag.checking { color:#cbe4ff; background:rgba(74,149,232,.16); }
       .tag.maintenance { color:#ffe0a7; background:rgba(255,183,80,.15); }
       .card-actions { display:flex; flex:0 0 auto; align-items:center; gap:9px; }
       .icon-button { display:grid; width:36px; height:36px; padding:0; place-items:center; border:1px solid var(--border); border-radius:9px; color:var(--text); background:rgba(5,12,23,.34); }
@@ -74,6 +76,12 @@
       .form-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:13px; }
       .form-grid.one { grid-template-columns:1fr; }
       .full-row { grid-column:1 / -1; }
+      .connection-panel { display:grid; gap:10px; padding:13px; border:1px solid var(--border); border-radius:11px; background:rgba(5,12,23,.2); }
+      .connection-heading { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+      .connection-heading strong { font-size:.86rem; }
+      .connection-heading p { margin:3px 0 0; color:var(--muted); font-size:.75rem; line-height:1.4; }
+      .connection-grid { display:grid; grid-template-columns:minmax(0,1fr) 150px; gap:13px; }
+      .connection-hint { min-height:1.2em; margin:0; color:var(--muted); font-size:.75rem; line-height:1.4; }
       .error { min-height:1.25em; margin:12px 0 0; color:var(--danger); font-size:.85rem; }
       .success { min-height:1.25em; margin:12px 0 0; color:var(--accent); font-size:.85rem; }
       .manager { display:grid; gap:22px; }
@@ -95,7 +103,7 @@
       .small-button.delete:hover { background:rgba(255,150,150,.16); }
       .admin-footer { display:flex; justify-content:space-between; align-items:center; gap:12px; border-top:1px solid var(--border); padding-top:16px; color:var(--muted); font-size:.8rem; }
       .visually-hidden { position:absolute; width:1px; height:1px; padding:0; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }
-      @media (max-width:760px) { .shell { width:min(100% - 22px,1800px); padding-top:18px; } .topbar { flex-direction:column; gap:18px; padding-bottom:20px; } .controls { width:100%; justify-content:space-between; } .refresh-info { text-align:left; } .filter-summary { width:100%; margin:0; } .server-grid { grid-template-columns:1fr; gap:14px; } .server-card { border-radius:14px; } iframe { height:760px; } .form-grid { grid-template-columns:1fr; } .full-row { grid-column:auto; } .manage-row { align-items:flex-start; flex-direction:column; } .row-actions { width:100%; justify-content:flex-start; } .card-header { align-items:flex-start; } .open-link { display:none; } }
+      @media (max-width:760px) { .shell { width:min(100% - 22px,1800px); padding-top:18px; } .topbar { flex-direction:column; gap:18px; padding-bottom:20px; } .controls { width:100%; justify-content:space-between; } .refresh-info { text-align:left; } .filter-summary { width:100%; margin:0; } .server-grid { grid-template-columns:1fr; gap:14px; } .server-card { border-radius:14px; } iframe { height:760px; } .form-grid,.connection-grid { grid-template-columns:1fr; } .full-row { grid-column:auto; } .connection-heading { align-items:flex-start; flex-direction:column; } .manage-row { align-items:flex-start; flex-direction:column; } .row-actions { width:100%; justify-content:flex-start; } .card-header { align-items:flex-start; } .open-link { display:none; } }
       @media (max-width:480px) { .controls { align-items:flex-start; flex-wrap:wrap; } .server-meta { margin-left:0; } .card-actions { gap:4px; } .refresh-select { max-width:112px; } .filter-label { width:100%; } .admin-footer { align-items:flex-start; flex-direction:column; } }
     </style>
   </head>
@@ -105,7 +113,7 @@
         <div>
           <p class="eyebrow"><span class="live-dot" aria-hidden="true"></span> Live-Übersicht</p>
           <h1>Meine Gameserver</h1>
-          <p class="intro">Status, Spieler und Infos aller Server auf einen Blick. Die einzelnen Community-Seiten werden automatisch alle zehn Sekunden neu geladen.</p>
+          <p class="intro">Status, Spieler und Infos aller Server auf einen Blick. Spielserver werden zentral alle 30 Sekunden auf Erreichbarkeit geprüft.</p>
         </div>
         <div class="controls" aria-live="polite">
           <div class="refresh-info"><strong id="refresh-label">Aktualisierung bereit</strong><span id="countdown-label">wird geladen</span></div>
@@ -121,7 +129,7 @@
 
       <section class="filter-bar" aria-label="Server filtern">
         <div class="filter-label"><label for="category-filter">Kategorie</label><select id="category-filter"><option value="all">Alle Kategorien</option></select></div>
-        <div class="filter-label"><label for="status-filter">Anzeige</label><select id="status-filter"><option value="all">Alle Server</option><option value="online">Als online markiert</option><option value="offline">Als offline markiert</option><option value="maintenance">Wartung</option><option value="auto">Community-Status</option></select></div>
+        <div class="filter-label"><label for="status-filter">Status</label><select id="status-filter"><option value="all">Alle Server</option><option value="online">Online</option><option value="offline">Offline</option><option value="unknown">Unbekannt</option><option value="checking">Wird geprüft</option><option value="maintenance">Wartung</option></select></div>
         <p class="filter-summary" id="filter-summary"></p>
       </section>
 
@@ -153,9 +161,13 @@
               <label>Anzeigename <input id="server-name" maxlength="60" placeholder="z. B. Minecraft Survival" required /></label>
               <label>Kategorie <input id="server-category" maxlength="40" placeholder="z. B. Minecraft" value="Allgemein" /></label>
               <label class="full-row">AMP- oder Community-Adresse <input id="server-url" type="url" placeholder="https://amp.beispiel.de/c/…" required /></label>
+              <div class="connection-panel full-row">
+                <div class="connection-heading"><div><strong>Automatische Spielserver-Prüfung</strong><p>Die Zieladresse wird aus dem „Connect“-Button der Community-Seite übernommen. Ein Spieltyp ist nicht nötig.</p></div><button class="button secondary" id="detect-connection" type="button">Aus „Connect“ übernehmen</button></div>
+                <div class="connection-grid"><label>Spielserver-Adresse <input id="server-connection-host" maxlength="253" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="Wird automatisch erkannt" /></label><label>Port <input id="server-connection-port" type="number" min="1" max="65535" step="1" inputmode="numeric" placeholder="Port" /></label></div>
+                <p class="connection-hint" id="connection-hint">Ohne erkannte Adresse zeigt die Übersicht den Status „Unbekannt“.</p>
+              </div>
               <label class="full-row">Kurzbeschreibung <textarea id="server-description" maxlength="300" placeholder="Optional: Hinweise zu diesem Server, Spielmodus oder Wartungsfenster."></textarea></label>
               <label>Sichtbarkeit <select id="server-visibility"><option value="visible">Öffentlich anzeigen</option><option value="maintenance">Öffentlich mit Wartungshinweis</option><option value="hidden">Nur im Adminbereich verstecken</option></select></label>
-              <label>Status-Markierung <select id="server-status"><option value="auto">Community-Seite zeigt Status</option><option value="online">Als online markieren</option><option value="offline">Als offline markieren</option></select></label>
             </div>
             <div class="form-actions"><button class="button secondary" id="cancel-edit" type="button" hidden>Bearbeitung abbrechen</button><button class="button" id="save-server-button" type="submit">Server hinzufügen</button></div>
             <p class="error" id="server-error" aria-live="polite"></p>
@@ -224,6 +236,10 @@
       const adminError = document.querySelector("#admin-error");
       const refreshSettingsError = document.querySelector("#refresh-settings-error");
       const refreshSettingsSuccess = document.querySelector("#refresh-settings-success");
+      const detectConnectionButton = document.querySelector("#detect-connection");
+      const connectionHostInput = document.querySelector("#server-connection-host");
+      const connectionPortInput = document.querySelector("#server-connection-port");
+      const connectionHint = document.querySelector("#connection-hint");
       let publicServers = [];
       let managedServers = [];
       let administrators = [];
@@ -232,6 +248,7 @@
       let adminDefaultRefreshIntervalSeconds = DEFAULT_REFRESH_INTERVAL_SECONDS;
       let activeRefreshIntervalSeconds = DEFAULT_REFRESH_INTERVAL_SECONDS;
       let admin = null;
+      let renderedServerIds = [];
 
       const gamepadIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" y1="11" x2="10" y2="11"></line><line x1="8" y1="9" x2="8" y2="13"></line><line x1="15" y1="12" x2="15.01" y2="12"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><path d="M17.5 5.5c-2.3.5-3.6.5-5.5.5s-3.2 0-5.5-.5C4.6 5.1 3 6.6 3 8.5v5c0 2.1 1.7 3.5 3.8 3.5 1.2 0 2.2-.6 2.9-1.5l1-1.3h2.6l1 1.3c.7.9 1.7 1.5 2.9 1.5 2.1 0 3.8-1.4 3.8-3.5v-5c0-1.9-1.6-3.4-3.5-3z"></path></svg>';
 
@@ -322,14 +339,17 @@
 
       function shownState(server) {
         if (server.visibility === "maintenance") return { key: "maintenance", text: "Wartung" };
-        if (server.status === "online") return { key: "online", text: "Online" };
-        if (server.status === "offline") return { key: "offline", text: "Offline" };
-        return { key: "auto", text: "Community-Status" };
+        const state = server.availability?.state;
+        if (state === "online") return { key: "online", text: "Online" };
+        if (state === "offline") return { key: "offline", text: "Offline" };
+        if (state === "checking") return { key: "checking", text: "Wird geprüft" };
+        return { key: "unknown", text: "Unbekannt" };
       }
 
       function makeServerCard(server) {
         const card = document.createElement("article");
         card.className = "server-card";
+        card.dataset.serverId = server.id;
         const header = document.createElement("header");
         header.className = "card-header";
         const identity = document.createElement("div");
@@ -351,6 +371,8 @@
         const stateTag = document.createElement("span");
         stateTag.className = `tag ${state.key}`;
         stateTag.textContent = state.text;
+        stateTag.dataset.statusId = server.id;
+        stateTag.title = server.availability?.detail || state.text;
         meta.append(category, stateTag);
         identity.append(name, meta);
         const actions = document.createElement("div");
@@ -400,18 +422,23 @@
         categoryFilter.value = categories.includes(previous) || previous === "all" ? previous : "all";
       }
 
-      function renderServers() {
-        clearRefreshTimers();
+      function filteredServers() {
         const desiredCategory = categoryFilter.value;
         const desiredStatus = statusFilter.value;
-        const visible = publicServers.filter((server) => {
+        return publicServers.filter((server) => {
           const categoryMatches = desiredCategory === "all" || server.category === desiredCategory;
           const state = shownState(server).key;
           return categoryMatches && (desiredStatus === "all" || desiredStatus === state);
         });
+      }
+
+      function renderServers() {
+        clearRefreshTimers();
+        const visible = filteredServers();
         grid.replaceChildren();
         filterSummary.textContent = `${visible.length} von ${publicServers.length} Servern angezeigt`;
         if (!visible.length) {
+          renderedServerIds = [];
           nextRefreshAt = 0;
           updateCountdown();
           const empty = document.createElement("p");
@@ -421,13 +448,32 @@
           return;
         }
         visible.forEach((server) => grid.append(makeServerCard(server)));
+        renderedServerIds = visible.map((server) => server.id);
         scheduleFrameRefresh();
+      }
+
+      function updateStatusPresentation() {
+        const visible = filteredServers();
+        const visibleIds = visible.map((server) => server.id);
+        if (visibleIds.join("|") !== renderedServerIds.join("|")) {
+          renderServers();
+          return;
+        }
+        filterSummary.textContent = `${visible.length} von ${publicServers.length} Servern angezeigt`;
+        document.querySelectorAll("[data-status-id]").forEach((tag) => {
+          const server = publicServers.find((item) => item.id === tag.dataset.statusId);
+          if (!server) return;
+          const state = shownState(server);
+          tag.className = `tag ${state.key}`;
+          tag.textContent = state.text;
+          tag.title = server.availability?.detail || state.text;
+        });
       }
 
       function managerStatus(server) {
         const visibility = server.visibility === "hidden" ? "versteckt" : server.visibility === "maintenance" ? "Wartung" : "öffentlich";
-        const status = server.status === "auto" ? "Community-Status" : server.status;
-        return `${server.category || "Allgemein"} · ${visibility} · ${status}`;
+        const connection = server.connection ? `${server.connection.host}:${server.connection.port}` : "Spieladresse fehlt";
+        return `${server.category || "Allgemein"} · ${visibility} · ${shownState(server).text} · ${connection}`;
       }
 
       function renderAdminList() {
@@ -538,6 +584,15 @@
         refreshAll();
       }
 
+      async function pollGameStatuses() {
+        const response = await api("statuses", { headers: {} });
+        if (!response.ok) return;
+        const body = await response.json();
+        const statuses = new Map((body.statuses || []).map((item) => [item.id, item.availability]));
+        publicServers = publicServers.map((server) => ({ ...server, availability: statuses.get(server.id) || server.availability }));
+        updateStatusPresentation();
+      }
+
       async function loadManagementData() {
         if (!admin) return;
         const [serverResponse, adminResponse, settingsResponse] = await Promise.all([api("admin/servers", { headers: {} }), api("admins", { headers: {} }), api("settings", { headers: {} })]);
@@ -574,7 +629,7 @@
         document.querySelector("#server-id").value = "";
         document.querySelector("#server-category").value = "Allgemein";
         document.querySelector("#server-visibility").value = "visible";
-        document.querySelector("#server-status").value = "auto";
+        connectionHint.textContent = "Ohne erkannte Adresse zeigt die Übersicht den Status „Unbekannt“.";
         document.querySelector("#server-form-title").textContent = "Server hinzufügen";
         document.querySelector("#save-server-button").textContent = "Server hinzufügen";
         document.querySelector("#cancel-edit").hidden = true;
@@ -587,9 +642,11 @@
         document.querySelector("#server-name").value = server.name;
         document.querySelector("#server-category").value = server.category || "Allgemein";
         document.querySelector("#server-url").value = server.url;
+        connectionHostInput.value = server.connection?.host || "";
+        connectionPortInput.value = server.connection?.port || "";
+        connectionHint.textContent = server.connection ? `Gespeicherte Spieladresse: ${server.connection.host}:${server.connection.port}` : "Keine Spieladresse gespeichert. Sie kann aus dem „Connect“-Button übernommen werden.";
         document.querySelector("#server-description").value = server.description || "";
         document.querySelector("#server-visibility").value = server.visibility || "visible";
-        document.querySelector("#server-status").value = server.status || "auto";
         document.querySelector("#server-form-title").textContent = `„${server.name}“ bearbeiten`;
         document.querySelector("#save-server-button").textContent = "Änderungen speichern";
         document.querySelector("#cancel-edit").hidden = false;
@@ -625,6 +682,77 @@
         await loadManagementData();
       }
 
+      function endpointFromText(value) {
+        if (typeof value !== "string") return null;
+        const pattern = /(?:\[([0-9a-f:]+)\]|((?:\d{1,3}\.){3}\d{1,3}|(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}|localhost))\s*:\s*(\d{1,5})/ig;
+        const match = pattern.exec(value);
+        if (!match) return null;
+        const port = Number(match[3]);
+        return Number.isInteger(port) && port >= 1 && port <= 65535 ? { host: match[1] || match[2], port } : null;
+      }
+
+      function connectionFromCommunityDocument(document) {
+        const elements = [...document.querySelectorAll("a, button, input, [data-clipboard-text], [data-copy], [data-address]")];
+        const valuesFor = (element) => [
+          element.getAttribute("href"), element.getAttribute("data-clipboard-text"), element.getAttribute("data-copy"),
+          element.getAttribute("data-address"), element.getAttribute("title"), element.getAttribute("aria-label"), element.value, element.textContent
+        ];
+        const preferred = elements.filter((element) => /connect|verbinden|server.?adresse/i.test(valuesFor(element).filter(Boolean).join(" ")));
+        for (const element of [...preferred, ...elements]) {
+          for (const value of valuesFor(element)) {
+            const endpoint = endpointFromText(value);
+            if (endpoint) return endpoint;
+          }
+        }
+        return endpointFromText(document.body?.innerText || "");
+      }
+
+      function detectConnectionFromCommunityPage(value) {
+        let communityUrl;
+        try {
+          communityUrl = new URL(value);
+        } catch {
+          return Promise.reject(new Error("Bitte zuerst eine gültige Community-Adresse eingeben."));
+        }
+        if (communityUrl.origin !== window.location.origin) {
+          return Promise.reject(new Error("Die automatische Erkennung funktioniert nur bei Community-Seiten auf derselben Domain. Für andere AMP-Domains Adresse und Port bitte einmal manuell eintragen."));
+        }
+        return new Promise((resolve, reject) => {
+          const frame = document.createElement("iframe");
+          let finished = false;
+          let attempts = 0;
+          let timeout = null;
+          const cleanUp = () => {
+            if (timeout !== null) window.clearTimeout(timeout);
+            frame.remove();
+          };
+          const finish = (result, error) => {
+            if (finished) return;
+            finished = true;
+            cleanUp();
+            if (error) reject(error); else resolve(result);
+          };
+          const readConnection = () => {
+            try {
+              const endpoint = connectionFromCommunityDocument(frame.contentDocument);
+              if (endpoint) return finish(endpoint);
+            } catch {
+              return finish(null, new Error("Die Community-Seite darf nicht ausgelesen werden. Bitte Adresse und Port manuell eintragen."));
+            }
+            attempts += 1;
+            if (attempts >= 3) return finish(null, new Error("Im Connect-Bereich wurde keine Spielserver-Adresse gefunden. Bitte Adresse und Port manuell eintragen."));
+            window.setTimeout(readConnection, 700);
+          };
+          frame.title = "Community-Seite wird nach der Spielserver-Adresse durchsucht";
+          frame.setAttribute("aria-hidden", "true");
+          frame.style.cssText = "position:fixed;left:-2px;top:-2px;width:1px;height:1px;opacity:0;pointer-events:none;border:0";
+          frame.addEventListener("load", () => window.setTimeout(readConnection, 700), { once: true });
+          timeout = window.setTimeout(() => finish(null, new Error("Die Community-Seite konnte nicht rechtzeitig geladen werden.")), 12_000);
+          document.body.append(frame);
+          frame.src = cacheBustedUrl(communityUrl.toString());
+        });
+      }
+
       document.querySelector("#admin-button").addEventListener("click", async () => {
         loginError.textContent = "";
         clearMessages();
@@ -644,6 +772,23 @@
       categoryFilter.addEventListener("change", renderServers);
       statusFilter.addEventListener("change", renderServers);
       document.querySelector("#cancel-edit").addEventListener("click", resetServerForm);
+      detectConnectionButton.addEventListener("click", async () => {
+        const original = detectConnectionButton.textContent;
+        detectConnectionButton.disabled = true;
+        detectConnectionButton.textContent = "Wird erkannt …";
+        connectionHint.textContent = "Die Community-Seite wird nach dem Connect-Ziel durchsucht …";
+        try {
+          const endpoint = await detectConnectionFromCommunityPage(document.querySelector("#server-url").value);
+          connectionHostInput.value = endpoint.host;
+          connectionPortInput.value = endpoint.port;
+          connectionHint.textContent = `Erkannt: ${endpoint.host}:${endpoint.port}. Nach dem Speichern beginnt die automatische Prüfung.`;
+        } catch (error) {
+          connectionHint.textContent = error.message || "Die Spielserver-Adresse konnte nicht automatisch erkannt werden.";
+        } finally {
+          detectConnectionButton.disabled = false;
+          detectConnectionButton.textContent = original;
+        }
+      });
 
       loginForm.addEventListener("submit", async (event) => {
         event.preventDefault();
@@ -664,9 +809,10 @@
           name: document.querySelector("#server-name").value,
           category: document.querySelector("#server-category").value,
           url: document.querySelector("#server-url").value,
+          connectionHost: connectionHostInput.value,
+          connectionPort: connectionPortInput.value,
           description: document.querySelector("#server-description").value,
-          visibility: document.querySelector("#server-visibility").value,
-          status: document.querySelector("#server-status").value
+          visibility: document.querySelector("#server-visibility").value
         };
         submit.disabled = true;
         const original = submit.textContent;
@@ -742,6 +888,7 @@
       });
 
       window.setInterval(() => { if (!document.hidden) updateCountdown(); }, 250);
+      window.setInterval(() => { if (!document.hidden) pollGameStatuses(); }, 30_000);
       document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshAll(); });
 
       loadPublicServers().catch((error) => {

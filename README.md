@@ -7,7 +7,7 @@ AMP selbst bleibt weiterhin wie bisher über die Startseite geschützt.
 ## Was sie kann
 
 - Alle AMP-Community-Seiten gemeinsam anzeigen; der Admin setzt den Standard, Besucher können den gemeinsamen Rhythmus für ihren Browser ändern.
-- Kategorien und Status-Markierungen filtern sowie jede Kachel als Großansicht öffnen.
+- Kategorien sowie automatisch ermittelte Online-, Offline- und Unbekannt-Status filtern und jede Kachel als Großansicht öffnen.
 - Einen geschützten Bereich **„Verwalten“** mit Benutzername und Passwort bieten.
 - Community-Seiten hinzufügen, bearbeiten, verstecken, in den Wartungsmodus setzen,
   sortieren und entfernen, ohne Dateien bearbeiten zu müssen.
@@ -35,7 +35,7 @@ Pakete oder Datenbank.
    für deine AMP-Domain übernehmen und Nginx neu laden.
 
 Danach ist die Übersicht unter `https://amp.example.com/uebersicht/`
-erreichbar. Die drei bisherigen Community-Seiten sind bereits übernommen.
+erreichbar. Community-Seiten können anschließend im Adminbereich ergänzt werden.
 
 ## AMP-Webroot
 
@@ -54,14 +54,12 @@ oben beschrieben. Die Nginx-Weiterleitung bindet ihn dann sauber unter
 ## Im Alltag
 
 Auf der Übersicht oben rechts **„Verwalten“** wählen und anmelden. Dort lassen
-sich Server mit Anzeigename, Kategorie, Kurzbeschreibung, Sichtbarkeit und
-Status-Markierung pflegen. Unter „Standard-Aktualisierung“ wird die Zeit für neue Besucher festgelegt. Jeder Besucher kann oben auf der Übersicht den gemeinsamen Rhythmus nur für seinen eigenen Browser ändern. Akzeptiert wird jede öffentliche HTTPS-Adresse
+sich Server mit Anzeigename, Kategorie, Kurzbeschreibung und Sichtbarkeit
+pflegen. Über **„Aus Connect übernehmen“** kann bei Community-Seiten auf derselben Domain die Spielserver-Adresse samt Port automatisch erfasst werden. Das Dashboard prüft diesen TCP-Port zentral alle 30 Sekunden und zeigt **Online**, **Offline** oder bei nicht eindeutig prüfbaren Verbindungen **Unbekannt**. Unter „Standard-Aktualisierung“ wird die Zeit für neue Besucher festgelegt. Jeder Besucher kann oben auf der Übersicht den gemeinsamen Rhythmus nur für seinen eigenen Browser ändern. Akzeptiert wird jede öffentliche HTTPS-Adresse
 eines AMP-Servers oder seiner Community-Seite, zum Beispiel
 `https://amp.beispiel.de/c/...` oder eine eigene HTTPS-Adresse mit Port.
 
-Die Status-Markierung ist bewusst nur ein zusätzlicher Hinweis der Übersicht.
-Den tatsächlichen AMP-Status, Spielerzahlen und weitere Details zeigt weiterhin
-die eingebettete Community-Seite selbst. Mit „Wartung“ kann ein Server sichtbar
+Die automatische Prüfung verwendet nur Adresse und Port; sie benötigt keinen Spieltyp und keine AMP-Zugangsdaten. Bei Spielen mit UDP-Port kann der allgemeine Test keinen sicheren Offline-Nachweis liefern und zeigt deshalb „Unbekannt“. Den tatsächlichen AMP-Status, Spielerzahlen und weitere Details zeigt weiterhin die eingebettete Community-Seite selbst. Mit „Wartung“ kann ein Server sichtbar
 bleiben, während Wartungsarbeiten stattfinden; „versteckt“ nimmt ihn nur aus der
 öffentlichen Übersicht heraus.
 

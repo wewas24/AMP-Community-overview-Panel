@@ -25,7 +25,7 @@ Die Sicherung ist wichtig, weil darin Servernamen, Reihenfolge, Kategorien, Wart
 Lade die neue Update-Datei nach `/opt/` hoch. Für dieses Update heißt die Datei:
 
 ```
-amp-community-dashboard-update-global-aktualisierung.zip
+amp-community-dashboard-update-spielserver-status.zip
 ```
 
 Das geht zum Beispiel mit WinSCP oder SFTP.
@@ -34,7 +34,7 @@ Das geht zum Beispiel mit WinSCP oder SFTP.
 
 ```bash
 cd /opt/amp-community-dashboard
-unzip -o /opt/amp-community-dashboard-update-global-aktualisierung.zip
+unzip -o /opt/amp-community-dashboard-update-spielserver-status.zip
 chown -R amp:amp /opt/amp-community-dashboard
 systemctl restart amp-community-dashboard
 systemctl status amp-community-dashboard --no-pager
@@ -54,10 +54,12 @@ https://amp.example.com/uebersicht/
 2. Im Feld **„Alle Kacheln / Sek.“** eine Zeit eingeben, zum Beispiel `30`.
 3. Prüfen, ob die Überschrift die gewählte Zeit für alle Kacheln anzeigt.
 4. Oben rechts **Verwalten** wählen und anmelden.
-5. Unter **„Standard-Aktualisierung“** die Zeit festlegen, die neuen Besuchern vorgeschlagen wird.
-6. Mit **„Admin-Standard“** kann ein Besucher seine eigene Auswahl wieder auf den Admin-Wert zurücksetzen.
+5. Bei einem Server auf **Bearbeiten** gehen und **„Aus Connect übernehmen“** verwenden. Die Community-Seite muss dafür auf derselben Domain wie das Dashboard liegen.
+6. Adresse und Port prüfen, speichern und nach höchstens 30 Sekunden die Status-Kategorie kontrollieren.
+7. Unter **„Standard-Aktualisierung“** die Zeit festlegen, die neuen Besuchern vorgeschlagen wird.
+8. Mit **„Admin-Standard“** kann ein Besucher seine eigene Auswahl wieder auf den Admin-Wert zurücksetzen.
 
-Nach dem Update legt das Dashboard automatisch eine Standardzeit von zehn Sekunden an. Bereits gespeicherte Server müssen nicht bearbeitet oder neu angelegt werden.
+Nach dem Update legt das Dashboard automatisch eine Standardzeit von zehn Sekunden an. Bereits gespeicherte Server müssen nicht neu angelegt werden. Für die neue automatische Statusanzeige wird einmalig die Spielserver-Adresse samt Port im jeweiligen Bearbeitungsformular übernommen oder manuell eingetragen.
 
 ## Was ein normales Update nicht verändert
 

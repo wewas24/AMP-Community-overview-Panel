@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
 import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
+import { connect, isIP } from "node:net";
 import { extname, resolve, sep } from "node:path";
 
 const host = process.env.HOST || "127.0.0.1";
@@ -19,8 +20,12 @@ const maxLoginAttempts = 5;
 const maxServers = 100;
 const maxAdmins = 20;
 const defaultRefreshIntervalSeconds = 10;
+const gameStatusIntervalMs = 30_000;
+const gameStatusTimeoutMs = 3_500;
 const sessions = new Map();
 const loginAttempts = new Map();
+const availabilityByServer = new Map();
+let availabilityRefresh = null;
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -98,13 +103,59 @@ function refreshIntervalFromInput(value) {
   return seconds;
 }
 
+function cleanGameHost(value) {
+  const host = typeof value === "string" ? value.trim() : "";
+  return host.startsWith("[") && host.endsWith("]") ? host.slice(1, -1) : host;
+}
+
+function validGameHost(host) {
+  if (isIP(host)) return true;
+  return /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(host);
+}
+
+function validateGameConnection(hostValue, portValue) {
+  const host = cleanGameHost(hostValue);
+  const port = Number(portValue);
+  if (!validGameHost(host) || !Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error("Bitte eine gültige Spielserver-Adresse und einen Port zwischen 1 und 65.535 eingeben.");
+  }
+  return { host, port };
+}
+
+function connectionFromStored(input) {
+  const connection = input?.connection && typeof input.connection === "object"
+    ? input.connection
+    : { host: input?.connectionHost, port: input?.connectionPort };
+  const host = cleanGameHost(connection?.host);
+  const hasPort = connection?.port !== undefined && connection?.port !== null && String(connection.port).trim() !== "";
+  if (!host && !hasPort) return null;
+  try {
+    return validateGameConnection(host, connection.port);
+  } catch {
+    return null;
+  }
+}
+
+function connectionFromInput(input) {
+  const connection = input?.connection && typeof input.connection === "object"
+    ? input.connection
+    : { host: input?.connectionHost, port: input?.connectionPort };
+  const host = cleanGameHost(connection?.host);
+  const hasPort = connection?.port !== undefined && connection?.port !== null && String(connection.port).trim() !== "";
+  if (!host && !hasPort) return null;
+  if (!host || !hasPort) {
+    throw new Error("Für die automatische Statusprüfung werden Spielserver-Adresse und Port zusammen benötigt.");
+  }
+  return validateGameConnection(host, connection.port);
+}
+
 function normalizeServer(input, index = 0) {
   const name = cleanText(input?.name, "Unbenannter Server", 60);
   const url = typeof input?.url === "string" ? input.url.trim() : "";
   const category = cleanText(input?.category, "Allgemein", 40);
   const description = cleanText(input?.description, "", 300);
   const visibility = ["visible", "maintenance", "hidden"].includes(input?.visibility) ? input.visibility : "visible";
-  const status = ["auto", "online", "offline"].includes(input?.status) ? input.status : "auto";
+  const connection = connectionFromStored(input);
   const sortOrder = Number.isInteger(input?.sortOrder) && input.sortOrder >= 0 ? input.sortOrder : index;
   return {
     id: typeof input?.id === "string" && /^[a-zA-Z0-9-]{8,80}$/.test(input.id) ? input.id : randomUUID(),
@@ -113,7 +164,8 @@ function normalizeServer(input, index = 0) {
     category,
     description,
     visibility,
-    status,
+    status: "auto",
+    connection,
     sortOrder,
     createdAt: typeof input?.createdAt === "string" ? input.createdAt : new Date().toISOString()
   };
@@ -139,7 +191,7 @@ function serverFromInput(input, existing, sortOrder) {
   const category = cleanText(input?.category, "Allgemein", 40);
   const description = cleanText(input?.description, "", 300);
   const visibility = ["visible", "maintenance", "hidden"].includes(input?.visibility) ? input.visibility : "visible";
-  const status = ["auto", "online", "offline"].includes(input?.status) ? input.status : "auto";
+  const connection = connectionFromInput(input);
   return {
     id: existing?.id || randomUUID(),
     name,
@@ -147,7 +199,8 @@ function serverFromInput(input, existing, sortOrder) {
     category,
     description,
     visibility,
-    status,
+    status: "auto",
+    connection,
     sortOrder,
     createdAt: existing?.createdAt || new Date().toISOString()
   };
@@ -162,9 +215,14 @@ function publicServer(server) {
     description: server.description,
     visibility: server.visibility,
     status: server.status,
+    availability: availabilityFor(server),
     sortOrder: server.sortOrder,
     createdAt: server.createdAt
   };
+}
+
+function adminServer(server) {
+  return { ...publicServer(server), connection: server.connection ? { ...server.connection } : null };
 }
 
 async function getServers() {
@@ -195,6 +253,65 @@ async function saveServers(servers) {
   const ordered = servers.map((server, index) => ({ ...server, sortOrder: index }));
   await writeJson(serverFile, ordered);
   return ordered;
+}
+
+function availabilityFor(server) {
+  const cached = availabilityByServer.get(server.id);
+  if (cached) return cached;
+  if (!server.connection) {
+    return { state: "unknown", checkedAt: null, detail: "Keine Spielserver-Adresse hinterlegt." };
+  }
+  return { state: "checking", checkedAt: null, detail: "Spielserver wird geprüft." };
+}
+
+function probeTcpConnection(connection) {
+  return new Promise((resolve) => {
+    const startedAt = Date.now();
+    let done = false;
+    const socket = connect({ host: connection.host, port: connection.port });
+    const finish = (state, detail) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timeout);
+      socket.destroy();
+      resolve({ state, detail, checkedAt: new Date().toISOString(), latencyMs: Date.now() - startedAt });
+    };
+    const timeout = setTimeout(() => finish("unknown", "Der Spielport hat nicht rechtzeitig geantwortet."), gameStatusTimeoutMs);
+    timeout.unref?.();
+    socket.once("connect", () => finish("online", "Der Spielport antwortet."));
+    socket.once("error", (error) => {
+      if (error?.code === "ECONNREFUSED") return finish("offline", "Der Spielport ist geschlossen.");
+      return finish("unknown", "Der Spielport konnte nicht eindeutig geprüft werden.");
+    });
+  });
+}
+
+async function refreshGameStatuses() {
+  if (availabilityRefresh) return availabilityRefresh;
+  availabilityRefresh = (async () => {
+    const servers = await getServers();
+    const activeIds = new Set(servers.map((server) => server.id));
+    await Promise.all(servers.map(async (server) => {
+      if (!server.connection) {
+        availabilityByServer.set(server.id, { state: "unknown", checkedAt: null, detail: "Keine Spielserver-Adresse hinterlegt." });
+        return;
+      }
+      availabilityByServer.set(server.id, { state: "checking", checkedAt: new Date().toISOString(), detail: "Spielserver wird geprüft." });
+      availabilityByServer.set(server.id, await probeTcpConnection(server.connection));
+    }));
+    for (const id of availabilityByServer.keys()) {
+      if (!activeIds.has(id)) availabilityByServer.delete(id);
+    }
+  })();
+  try {
+    return await availabilityRefresh;
+  } finally {
+    availabilityRefresh = null;
+  }
+}
+
+function triggerGameStatusRefresh() {
+  void refreshGameStatuses().catch((error) => console.error("Spielserver-Status konnte nicht aktualisiert werden:", error));
 }
 
 async function getSettings() {
@@ -323,6 +440,13 @@ async function handleApi(request, response, url) {
     return sendJson(response, 200, { servers: servers.filter((server) => server.visibility !== "hidden").map(publicServer), ...settings });
   }
 
+  if (request.method === "GET" && path === "/api/statuses") {
+    const servers = (await getServers()).filter((server) => server.visibility !== "hidden");
+    return sendJson(response, 200, {
+      statuses: servers.map((server) => ({ id: server.id, availability: availabilityFor(server) }))
+    });
+  }
+
   if (request.method === "GET" && path === "/api/session") {
     const session = getSession(request);
     return sendJson(response, 200, { authenticated: Boolean(session), username: session?.username ?? null });
@@ -360,7 +484,7 @@ async function handleApi(request, response, url) {
   if (request.method !== "GET" && !isSameOrigin(request)) return sendError(response, 403, "Ungültige Anfragequelle.");
 
   if (request.method === "GET" && path === "/api/admin/servers") {
-    return sendJson(response, 200, { servers: (await getServers()).map(publicServer) });
+    return sendJson(response, 200, { servers: (await getServers()).map(adminServer) });
   }
 
   if (request.method === "GET" && path === "/api/admins") {
@@ -372,7 +496,7 @@ async function handleApi(request, response, url) {
   }
 
   if (request.method === "GET" && path === "/api/export") {
-    return sendJson(response, 200, { version: 3, exportedAt: new Date().toISOString(), settings: await getSettings(), servers: (await getServers()).map(publicServer) }, { "Content-Disposition": "attachment; filename=amp-community-backup.json" });
+    return sendJson(response, 200, { version: 4, exportedAt: new Date().toISOString(), settings: await getSettings(), servers: (await getServers()).map(adminServer) }, { "Content-Disposition": "attachment; filename=amp-community-backup.json" });
   }
 
   if (request.method === "POST" && path === "/api/settings") {
@@ -390,6 +514,7 @@ async function handleApi(request, response, url) {
     if (servers.some((item) => item.url === server.url)) return sendError(response, 409, "Diese Community-Seite ist bereits gespeichert.");
     servers.push(server);
     await saveServers(servers);
+    triggerGameStatusRefresh();
     return sendJson(response, 201, { server: publicServer(server) });
   }
 
@@ -426,6 +551,7 @@ async function handleApi(request, response, url) {
       : await getSettings();
     const saved = await saveServers(imported);
     await writeJson(settingsFile, settings);
+    triggerGameStatusRefresh();
     return sendJson(response, 200, { servers: saved.map(publicServer), ...settings });
   }
 
@@ -453,6 +579,7 @@ async function handleApi(request, response, url) {
     if (servers.some((server) => server.id !== updated.id && server.url === updated.url)) return sendError(response, 409, "Diese Community-Seite ist bereits gespeichert.");
     servers[index] = updated;
     await saveServers(servers);
+    triggerGameStatusRefresh();
     return sendJson(response, 200, { server: publicServer(updated) });
   }
 
@@ -461,6 +588,7 @@ async function handleApi(request, response, url) {
     const nextServers = servers.filter((server) => server.id !== serverMatch[1]);
     if (nextServers.length === servers.length) return sendError(response, 404, "Server nicht gefunden.");
     await saveServers(nextServers);
+    availabilityByServer.delete(serverMatch[1]);
     return sendJson(response, 200, { ok: true });
   }
 
@@ -497,6 +625,9 @@ async function handleStatic(request, response, url) {
 }
 
 await ensureDataFiles();
+triggerGameStatusRefresh();
+const gameStatusTimer = setInterval(triggerGameStatusRefresh, gameStatusIntervalMs);
+gameStatusTimer.unref?.();
 
 const server = createServer(async (request, response) => {
   try {
