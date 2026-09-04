@@ -203,8 +203,10 @@
           </section>
 
           <section class="admin-section">
-            <div class="section-heading"><div><h3>Änderungsprotokoll</h3><p>Zeigt administrative Änderungen. Einträge werden nach sieben Tagen automatisch gelöscht.</p></div></div>
+            <div class="section-heading"><div><h3>Änderungsprotokoll</h3><p>Zeigt die fünf neuesten administrativen Änderungen. Alle Einträge können als Datei heruntergeladen werden und werden nach sieben Tagen automatisch gelöscht.</p></div></div>
             <div class="activity-list" id="activity-list"></div>
+            <div class="form-actions"><button class="button secondary" id="download-activity-log" type="button">Änderungsprotokoll herunterladen</button></div>
+            <p class="error" id="activity-log-error" aria-live="polite"></p>
           </section>
 
           <section class="admin-section">
@@ -251,6 +253,7 @@
       const refreshSettingsForm = document.querySelector("#refresh-settings-form");
       const manageList = document.querySelector("#manage-list");
       const activityList = document.querySelector("#activity-list");
+      const downloadActivityLogButton = document.querySelector("#download-activity-log");
       const adminList = document.querySelector("#admin-list");
       const loginError = document.querySelector("#login-error");
       const serverError = document.querySelector("#server-error");
@@ -258,6 +261,7 @@
       const backupError = document.querySelector("#backup-error");
       const backupSuccess = document.querySelector("#backup-success");
       const adminError = document.querySelector("#admin-error");
+      const activityLogError = document.querySelector("#activity-log-error");
       const refreshSettingsError = document.querySelector("#refresh-settings-error");
       const refreshSettingsSuccess = document.querySelector("#refresh-settings-success");
       const detectConnectionButton = document.querySelector("#detect-connection");
@@ -630,6 +634,7 @@
         backupError.textContent = "";
         backupSuccess.textContent = "";
         adminError.textContent = "";
+        activityLogError.textContent = "";
         refreshSettingsError.textContent = "";
         refreshSettingsSuccess.textContent = "";
       }
@@ -764,6 +769,31 @@
         await loadManagementData();
       }
 
+      async function downloadActivityLog() {
+        activityLogError.textContent = "";
+        const original = downloadActivityLogButton.textContent;
+        downloadActivityLogButton.disabled = true;
+        downloadActivityLogButton.textContent = "Wird erstellt …";
+        try {
+          const response = await api("activity-log/download", { headers: {} });
+          if (!response.ok) throw new Error(await responseMessage(response));
+          const file = await response.blob();
+          const link = document.createElement("a");
+          const downloadUrl = URL.createObjectURL(file);
+          link.href = downloadUrl;
+          link.download = "amp-community-aenderungsprotokoll.json";
+          document.body.append(link);
+          link.click();
+          link.remove();
+          window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 1_000);
+        } catch (error) {
+          activityLogError.textContent = error.message || "Das Änderungsprotokoll konnte nicht heruntergeladen werden.";
+        } finally {
+          downloadActivityLogButton.disabled = false;
+          downloadActivityLogButton.textContent = original;
+        }
+      }
+
       function endpointFromText(value) {
         if (typeof value !== "string") return null;
         const teamSpeak = /ts3server:|teamspeak/i.test(value);
@@ -863,6 +893,7 @@
       });
       document.querySelector("#close-admin").addEventListener("click", () => adminDialog.close());
       document.querySelector("#close-login").addEventListener("click", () => loginDialog.close());
+      downloadActivityLogButton.addEventListener("click", downloadActivityLog);
       refreshButton.addEventListener("click", refreshAll);
       visitorRefreshInput.addEventListener("change", () => applyVisitorRefreshInterval(Number(visitorRefreshInput.value)));
       useAdminRefreshDefaultButton.addEventListener("click", useAdminRefreshDefault);

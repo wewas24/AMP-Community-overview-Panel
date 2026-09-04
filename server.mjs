@@ -680,7 +680,12 @@ async function handleApi(request, response, url) {
   }
 
   if (request.method === "GET" && path === "/api/activity-log") {
-    return sendJson(response, 200, { entries: await getActivityLog() });
+    return sendJson(response, 200, { entries: (await getActivityLog()).slice(0, 5) });
+  }
+
+  if (request.method === "GET" && path === "/api/activity-log/download") {
+    const entries = await getActivityLog();
+    return sendJson(response, 200, { version: 1, retentionDays: 7, exportedAt: new Date().toISOString(), entries }, { "Content-Disposition": "attachment; filename=amp-community-aenderungsprotokoll.json" });
   }
 
   if (request.method === "GET" && path === "/api/export") {
