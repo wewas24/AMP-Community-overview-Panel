@@ -55,6 +55,12 @@ function sendJson(response, status, body, headers = {}) {
   response.end(JSON.stringify(body));
 }
 
+function sendText(response, status, body, headers = {}) {
+  setSecurityHeaders(response);
+  response.writeHead(status, { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-store", ...headers });
+  response.end(body);
+}
+
 function sendError(response, status, message) {
   sendJson(response, status, { error: message });
 }
@@ -131,6 +137,17 @@ async function addActivityLog(username, action, detail = "") {
   const entries = await getActivityLog();
   entries.unshift({ id: randomUUID(), createdAt: new Date().toISOString(), username, action: cleanText(action, "Änderung", 100), detail: cleanText(detail, "", 240) });
   await writeJson(activityLogFile, entries);
+}
+
+function activityLogText(entries) {
+  const plain = (value) => String(value || "").replace(/[\r\n]+/g, " ").trim();
+  const lines = ["AMP Community Dashboard – Änderungsprotokoll", `Erstellt: ${new Date().toISOString()}`, "Aufbewahrung: Einträge werden nach sieben Tagen automatisch gelöscht.", ""];
+  if (!entries.length) return `${lines.join("\n")}Keine Änderungen in den letzten sieben Tagen.\n`;
+  entries.forEach((entry, index) => {
+    lines.push(`${index + 1}. ${plain(entry.createdAt)} · ${plain(entry.username)}`);
+    lines.push(`   ${plain(entry.action)}${entry.detail ? ` – ${plain(entry.detail)}` : ""}`);
+  });
+  return `${lines.join("\n")}\n`;
 }
 
 function normalizeRefreshInterval(value, fallback = defaultRefreshIntervalSeconds) {
@@ -685,7 +702,7 @@ async function handleApi(request, response, url) {
 
   if (request.method === "GET" && path === "/api/activity-log/download") {
     const entries = await getActivityLog();
-    return sendJson(response, 200, { version: 1, retentionDays: 7, exportedAt: new Date().toISOString(), entries }, { "Content-Disposition": "attachment; filename=amp-community-aenderungsprotokoll.json" });
+    return sendText(response, 200, activityLogText(entries), { "Content-Disposition": "attachment; filename=amp-community-aenderungsprotokoll.txt" });
   }
 
   if (request.method === "GET" && path === "/api/export") {
