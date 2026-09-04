@@ -12,7 +12,9 @@ AMP selbst bleibt weiterhin wie bisher über die Startseite geschützt.
 - Einen geschützten Bereich **„Verwalten“** mit Benutzername und Passwort bieten.
 - Community-Seiten hinzufügen, bearbeiten, verstecken, in den Wartungsmodus setzen,
   sortieren und entfernen, ohne Dateien bearbeiten zu müssen.
-- Mehrere Administratorkonten verwalten.
+- Einen gut sichtbaren, eigenen Hinweis pro Server für Besucher anzeigen.
+- Mehrere Administratorkonten mit Rollen verwalten: Vollzugriff, Serververwaltung oder Protokoll ansehen.
+- Bei Statuswechseln zwischen Online und Offline optional eine E-Mail per SMTP mit STARTTLS senden.
 - Administrative Änderungen mit Benutzername und Zeit im Änderungsprotokoll festhalten; die Verwaltung zeigt die fünf neuesten Einträge, das vollständige Protokoll kann als lesbare Textdatei heruntergeladen werden und wird nach sieben Tagen automatisch bereinigt.
 - Die Serverliste als Sicherung herunterladen und später wieder importieren.
 - Die Serverliste und die globale Standardzeit dauerhaft in `data/` speichern.
@@ -64,6 +66,12 @@ eines AMP-Servers oder seiner Community-Seite, zum Beispiel
 Die automatische Prüfung verwendet nur Adresse und Port; sie benötigt keinen Spieltyp und keine AMP-Zugangsdaten. Bei nicht standardisierten oder blockierten UDP-Abfragen zeigt sie „Unbekannt“, statt fälschlich Offline zu behaupten. TeamSpeak kann ohne Spieltyp automatisch erkannt werden, sofern dessen optionaler ServerQuery-Port erreichbar ist. Den tatsächlichen AMP-Status, Spielerzahlen und weitere Details zeigt weiterhin die eingebettete Community-Seite selbst. Mit „Wartung“ kann ein Server sichtbar
 bleiben, während Wartungsarbeiten stattfinden; „versteckt“ nimmt ihn nur aus der
 öffentlichen Übersicht heraus.
+
+## E-Mail-Benachrichtigungen und Rollen
+
+Unter **Verwaltung → Überwachung** können SMTP-Server, Port, Benutzername, Passwort sowie Absender- und Empfängeradresse hinterlegt werden. Der Versand verwendet STARTTLS (üblicherweise Port **587**, nicht der Direkt-TLS-Port 465) und kann mit **„Test-E-Mail senden“** geprüft werden. Danach wird bei einem eindeutigen Wechsel zwischen Online und Offline automatisch eine Nachricht gesendet. Das gespeicherte Passwort wird nie an Besucher oder zurück an den Browser ausgeliefert; ein leeres Passwortfeld beim Speichern behält das bisherige Passwort.
+
+Neue Konten erhalten eine Rolle: **Vollzugriff** darf alles verwalten, **Serververwaltung** darf ausschließlich Server bearbeiten und **Protokoll ansehen** darf nur die Änderungsprotokolle lesen. Bestehende Konten werden beim ersten Start automatisch als Vollzugriff übernommen.
 
 ## Wichtig
 

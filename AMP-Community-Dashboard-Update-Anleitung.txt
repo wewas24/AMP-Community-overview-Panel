@@ -25,7 +25,7 @@ Die Sicherung ist wichtig, weil darin Servernamen, Reihenfolge, Kategorien, Wart
 Lade die neue Update-Datei nach `/opt/` hoch. Für dieses Update heißt die Datei:
 
 ```
-amp-community-dashboard-update-spielserver-status.zip
+amp-community-dashboard-update-email-starttls.zip
 ```
 
 Das geht zum Beispiel mit WinSCP oder SFTP.
@@ -34,7 +34,7 @@ Das geht zum Beispiel mit WinSCP oder SFTP.
 
 ```bash
 cd /opt/amp-community-dashboard
-unzip -o /opt/amp-community-dashboard-update-spielserver-status.zip
+unzip -o /opt/amp-community-dashboard-update-email-starttls.zip
 chown -R amp:amp /opt/amp-community-dashboard
 systemctl restart amp-community-dashboard
 systemctl status amp-community-dashboard --no-pager
@@ -75,6 +75,18 @@ Eine reine Update-Datei überschreibt keine `data/`-Dateien. Dadurch bleiben erh
 Bei diesem Update wird zusätzlich einmalig `data/settings.json` mit der Admin-Standardzeit angelegt.
 
 Nach einem normalen Update `node create-admin.mjs` **nicht** erneut ausführen. Das ist nur bei einer komplett neuen Installation nötig.
+
+## E-Mail-Benachrichtigungen mit STARTTLS einrichten
+
+Nach diesem Update unter **Anmelden → Verwaltung → Überwachung** die Maildaten eintragen:
+
+1. SMTP-Server, beispielsweise `mail.beispiel.de`
+2. SMTP-Port, normalerweise `587`
+3. Benutzername und Passwort des Mailkontos
+4. Absender- und Empfänger-E-Mail-Adresse
+5. **„E-Mail-Einstellungen speichern“** und anschließend **„Test-E-Mail senden“** wählen.
+
+Der Mailserver muss STARTTLS sowie die SMTP-Anmeldung mit Benutzername und Passwort erlauben. Für STARTTLS wird üblicherweise Port `587` verwendet; Port `465` verwendet direktes TLS und ist dafür nicht geeignet. Das Passwort bleibt nur auf dem Server gespeichert. Es wird weder im Browser noch in einer Sicherungsdatei angezeigt. Nach erfolgreichem Test informiert das Dashboard per E-Mail über einen Wechsel eines Spielservers zwischen Online und Offline.
 
 ## Wenn ein künftiges Update Nginx oder den Dienst ändert
 

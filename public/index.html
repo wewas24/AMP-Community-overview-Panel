@@ -59,6 +59,7 @@
       .open-link { flex:0 0 auto; color:var(--accent); font-size:.84rem; font-weight:700; text-decoration:none; }
       .open-link:hover { color:#b7ffdb; text-decoration:underline; }
       .server-description { margin:0; padding:11px 16px; border-bottom:1px solid var(--border); color:var(--muted); font-size:.84rem; line-height:1.45; }
+      .server-notice { margin:0; padding:11px 16px; border-bottom:1px solid rgba(255,209,132,.32); color:#ffe0a2; background:rgba(255,209,132,.08); font-size:.88rem; font-weight:650; line-height:1.45; }
       iframe { display:block; width:100%; height:900px; border:0; background:var(--surface); }
       .server-card:fullscreen { width:100vw; height:100vh; border:0; border-radius:0; background:var(--page); }
       .server-card:fullscreen iframe { height:calc(100vh - 88px); }
@@ -86,6 +87,10 @@
       .error:not(:empty) { padding:12px 14px; border:1px solid rgba(255,154,154,.5); border-radius:10px; background:rgba(255,118,118,.12); font-size:1rem; }
       .success { min-height:1.25em; margin:12px 0 0; color:var(--accent); font-size:.85rem; }
       .manager { display:grid; gap:22px; }
+      .admin-tabs { display:flex; flex-wrap:wrap; gap:8px; padding:8px; border:1px solid var(--border); border-radius:13px; background:rgba(255,255,255,.025); }
+      .admin-tab { min-height:38px; padding:0 13px; border:1px solid transparent; border-radius:9px; color:var(--muted); background:transparent; font-size:.86rem; font-weight:740; }
+      .admin-tab:hover { color:var(--text); background:rgba(255,255,255,.06); }
+      .admin-tab[aria-selected="true"] { border-color:rgba(116,226,178,.4); color:#d9ffec; background:rgba(116,226,178,.14); }
       .admin-section { padding:17px; border:1px solid var(--border); border-radius:13px; background:rgba(255,255,255,.025); }
       .section-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:12px; margin-bottom:13px; }
       .section-heading h3 { margin:0; }
@@ -166,7 +171,15 @@
         </div>
 
         <section class="manager" id="manager" hidden>
-          <form class="admin-section" id="server-form">
+          <nav class="admin-tabs" aria-label="Verwaltungsbereiche">
+            <button class="admin-tab" type="button" data-admin-tab="servers" data-admin-roles="owner editor" aria-selected="true">Server</button>
+            <button class="admin-tab" type="button" data-admin-tab="website" data-admin-roles="owner" aria-selected="false">Webseite</button>
+            <button class="admin-tab" type="button" data-admin-tab="monitoring" data-admin-roles="owner" aria-selected="false">Überwachung</button>
+            <button class="admin-tab" type="button" data-admin-tab="access" data-admin-roles="owner" aria-selected="false">Sicherung & Zugänge</button>
+            <button class="admin-tab" type="button" data-admin-tab="logs" data-admin-roles="owner auditor" aria-selected="false">Protokoll</button>
+          </nav>
+
+          <form class="admin-section" id="server-form" data-admin-panel="servers">
             <div class="section-heading">
               <div><h3 id="server-form-title">Server hinzufügen</h3><p>Du kannst jede öffentliche HTTPS-Adresse eines AMP-Servers oder einer Community-Seite verwenden.</p></div>
             </div>
@@ -182,6 +195,7 @@
                 <p class="connection-hint" id="connection-hint">Ohne erkannte Adresse zeigt die Übersicht den Status „Unbekannt“. Für TeamSpeak ist der Query-Port optional; bei abweichender Konfiguration hier eintragen.</p>
               </div>
               <label class="full-row">Kurzbeschreibung <textarea id="server-description" maxlength="300" placeholder="Optional: Hinweise zu diesem Server, Spielmodus oder Wartungsfenster."></textarea></label>
+              <label class="full-row">Hinweis für Besucher <textarea id="server-notice" maxlength="240" placeholder="Optional: z. B. Mod-Update läuft, Neustart um 20:00 Uhr oder Whitelist aktiv."></textarea></label>
               <label>Sichtbarkeit <select id="server-visibility"><option value="visible">Öffentlich anzeigen</option><option value="maintenance">Öffentlich mit Wartungshinweis</option><option value="hidden">Nur im Adminbereich verstecken</option></select></label>
             </div>
             <div class="form-actions"><button class="button secondary" id="cancel-edit" type="button" hidden>Bearbeitung abbrechen</button><button class="button" id="save-server-button" type="submit">Server hinzufügen</button></div>
@@ -189,7 +203,7 @@
             <p class="success" id="server-success" aria-live="polite"></p>
           </form>
 
-          <form class="admin-section" id="refresh-settings-form">
+          <form class="admin-section" id="refresh-settings-form" data-admin-panel="website" hidden>
             <div class="section-heading"><div><h3>Seiteneinstellungen</h3><p>Der Webseitenname gilt für alle Besucher. Die Aktualisierungszeit wird neuen Besuchern vorgeschlagen.</p></div></div>
             <div class="form-grid"><label>Webseitenname <input id="admin-site-title" maxlength="70" minlength="3" value="Meine Gameserver" required /></label><label>Standardzeit (Sekunden) <input id="admin-default-refresh-interval" type="number" min="5" max="3600" step="1" value="10" required /></label></div>
             <div class="form-actions"><button class="button" type="submit">Standard speichern</button></div>
@@ -197,30 +211,47 @@
             <p class="success" id="refresh-settings-success" aria-live="polite"></p>
           </form>
 
-          <section class="admin-section">
+          <form class="admin-section" id="notification-settings-form" data-admin-panel="monitoring" hidden>
+            <div class="section-heading"><div><h3>Ausfallbenachrichtigungen per E-Mail</h3><p>Bei einem Wechsel von Online zu Offline oder zurück wird eine E-Mail über SMTP mit STARTTLS gesendet.</p></div></div>
+            <div class="form-grid">
+              <label>SMTP-Server <input id="smtp-host" maxlength="253" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="mail.beispiel.de" /></label>
+              <label>SMTP-Port <input id="smtp-port" type="number" min="1" max="65535" step="1" inputmode="numeric" value="587" /></label>
+              <label>SMTP-Benutzername <input id="smtp-username" maxlength="253" autocomplete="username" autocapitalize="off" spellcheck="false" placeholder="benutzer@beispiel.de" /></label>
+              <label>SMTP-Passwort <input id="smtp-password" type="password" maxlength="512" autocomplete="new-password" placeholder="Beim Speichern leer lassen, um es beizubehalten" /></label>
+              <label>Absender-E-Mail <input id="smtp-from" type="email" maxlength="254" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="dashboard@beispiel.de" /></label>
+              <label>Empfänger-E-Mail <input id="smtp-to" type="email" maxlength="254" autocomplete="email" autocapitalize="off" spellcheck="false" placeholder="admin@beispiel.de" /></label>
+            </div>
+            <p class="connection-hint">Empfohlen ist Port 587. Port 465 (direktes TLS) ist kein STARTTLS-Port. Der Mailserver muss STARTTLS sowie die Anmeldung mit Benutzername und Passwort erlauben. Das gespeicherte Passwort wird nie wieder angezeigt.</p>
+            <div class="form-actions"><button class="button secondary" id="test-email-notification" type="button">Test-E-Mail senden</button><button class="button" type="submit">E-Mail-Einstellungen speichern</button></div>
+            <p class="error" id="notification-settings-error" aria-live="polite"></p>
+            <p class="success" id="notification-settings-success" aria-live="polite"></p>
+          </form>
+
+          <section class="admin-section" data-admin-panel="servers">
             <div class="section-heading"><div><h3>Reihenfolge und Server</h3><p>Die Pfeile bestimmen die Reihenfolge auf der öffentlichen Übersicht.</p></div></div>
             <div class="manage-list" id="manage-list"></div>
           </section>
 
-          <section class="admin-section">
+          <section class="admin-section" data-admin-panel="logs" hidden>
             <div class="section-heading"><div><h3>Änderungsprotokoll</h3><p>Zeigt die fünf neuesten administrativen Änderungen. Alle Einträge können als Datei heruntergeladen werden und werden nach sieben Tagen automatisch gelöscht.</p></div></div>
             <div class="activity-list" id="activity-list"></div>
             <div class="form-actions"><button class="button secondary" id="download-activity-log" type="button">Änderungsprotokoll herunterladen</button></div>
             <p class="error" id="activity-log-error" aria-live="polite"></p>
           </section>
 
-          <section class="admin-section">
+          <section class="admin-section" data-admin-panel="access" hidden>
             <div class="section-heading"><div><h3>Sicherung</h3><p>Export speichert deine Serverliste. Ein Import ersetzt anschließend die gesamte Serverliste.</p></div></div>
             <div class="form-actions"><input class="visually-hidden" id="import-file" type="file" accept="application/json,.json" /><label class="button secondary" for="import-file">Sicherung importieren</label><button class="button warning" id="export-button" type="button">Sicherung herunterladen</button></div>
             <p class="error" id="backup-error" aria-live="polite"></p>
             <p class="success" id="backup-success" aria-live="polite"></p>
           </section>
 
-          <section class="admin-section">
+          <section class="admin-section" data-admin-panel="access" hidden>
             <div class="section-heading"><div><h3>Administratoren</h3><p>Weitere Personen können dieselbe Verwaltungsoberfläche nutzen.</p></div></div>
             <form class="form-grid" id="admin-form">
               <label>Neuer Benutzername <input id="new-admin-username" maxlength="32" autocomplete="off" placeholder="z. B. mitadmin" required /></label>
               <label>Neues Passwort <input id="new-admin-password" type="password" minlength="12" autocomplete="new-password" placeholder="Mindestens 12 Zeichen" required /></label>
+              <label>Rolle <select id="new-admin-role"><option value="editor">Serververwaltung</option><option value="auditor">Protokoll ansehen</option><option value="owner">Vollzugriff</option></select></label>
               <div class="form-actions full-row"><button class="button" type="submit">Admin hinzufügen</button></div>
             </form>
             <p class="error" id="admin-error" aria-live="polite"></p>
@@ -249,8 +280,18 @@
       const adminDialog = document.querySelector("#admin-dialog");
       const loginForm = document.querySelector("#login-form");
       const manager = document.querySelector("#manager");
+      const adminTabs = [...document.querySelectorAll("[data-admin-tab]")];
+      const adminPanels = [...document.querySelectorAll("[data-admin-panel]")];
       const serverForm = document.querySelector("#server-form");
       const refreshSettingsForm = document.querySelector("#refresh-settings-form");
+      const notificationSettingsForm = document.querySelector("#notification-settings-form");
+      const smtpHostInput = document.querySelector("#smtp-host");
+      const smtpPortInput = document.querySelector("#smtp-port");
+      const smtpUsernameInput = document.querySelector("#smtp-username");
+      const smtpPasswordInput = document.querySelector("#smtp-password");
+      const smtpFromInput = document.querySelector("#smtp-from");
+      const smtpToInput = document.querySelector("#smtp-to");
+      const testEmailNotificationButton = document.querySelector("#test-email-notification");
       const manageList = document.querySelector("#manage-list");
       const activityList = document.querySelector("#activity-list");
       const downloadActivityLogButton = document.querySelector("#download-activity-log");
@@ -264,6 +305,8 @@
       const activityLogError = document.querySelector("#activity-log-error");
       const refreshSettingsError = document.querySelector("#refresh-settings-error");
       const refreshSettingsSuccess = document.querySelector("#refresh-settings-success");
+      const notificationSettingsError = document.querySelector("#notification-settings-error");
+      const notificationSettingsSuccess = document.querySelector("#notification-settings-success");
       const detectConnectionButton = document.querySelector("#detect-connection");
       const connectionHostInput = document.querySelector("#server-connection-host");
       const connectionPortInput = document.querySelector("#server-connection-port");
@@ -281,6 +324,14 @@
       let admin = null;
       let renderedServerIds = [];
       let sortMoveBusy = false;
+      let activeAdminPanel = "servers";
+
+      const roleLabels = { owner: "Vollzugriff", editor: "Serververwaltung", auditor: "Protokoll ansehen" };
+      const roleCapabilities = {
+        owner: new Set(["servers", "website", "monitoring", "access", "logs"]),
+        editor: new Set(["servers"]),
+        auditor: new Set(["logs"])
+      };
 
       const gamepadIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" y1="11" x2="10" y2="11"></line><line x1="8" y1="9" x2="8" y2="13"></line><line x1="15" y1="12" x2="15.01" y2="12"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><path d="M17.5 5.5c-2.3.5-3.6.5-5.5.5s-3.2 0-5.5-.5C4.6 5.1 3 6.6 3 8.5v5c0 2.1 1.7 3.5 3.8 3.5 1.2 0 2.2-.6 2.9-1.5l1-1.3h2.6l1 1.3c.7.9 1.7 1.5 2.9 1.5 2.1 0 3.8-1.4 3.8-3.5v-5c0-1.9-1.6-3.4-3.5-3z"></path></svg>';
 
@@ -434,6 +485,12 @@
         actions.append(fullScreen, open);
         header.append(identity, actions);
         card.append(header);
+        if (server.notice) {
+          const notice = document.createElement("p");
+          notice.className = "server-notice";
+          notice.textContent = `Hinweis: ${server.notice}`;
+          card.append(notice);
+        }
         if (server.description) {
           const description = document.createElement("p");
           description.className = "server-description";
@@ -576,11 +633,20 @@
           name.textContent = account.username;
           const hint = document.createElement("div");
           hint.className = "manage-flags";
-          hint.textContent = account.username === admin?.username ? "Aktuell angemeldet" : "Kann die Übersicht verwalten";
+          hint.textContent = `${roleLabels[account.role] || "Unbekannte Rolle"}${account.username === admin?.username ? " · Aktuell angemeldet" : ""}`;
           info.append(name, hint);
+          const actions = document.createElement("div");
+          actions.className = "row-actions";
+          const role = document.createElement("select");
+          role.className = "small-button";
+          [["owner", "Vollzugriff"], ["editor", "Server"], ["auditor", "Protokoll"]].forEach(([value, label]) => role.add(new Option(label, value)));
+          role.value = account.role;
+          role.setAttribute("aria-label", `Rolle für ${account.username}`);
+          role.addEventListener("change", () => updateAdministratorRole(account, role.value));
           const remove = managerButton("Entfernen", "Administratorkonto entfernen", () => deleteAdministrator(account), "delete");
           remove.disabled = account.username === admin?.username || administrators.length <= 1;
-          row.append(info, remove);
+          actions.append(role, remove);
+          row.append(info, actions);
           adminList.append(row);
         });
       }
@@ -637,6 +703,37 @@
         activityLogError.textContent = "";
         refreshSettingsError.textContent = "";
         refreshSettingsSuccess.textContent = "";
+        notificationSettingsError.textContent = "";
+        notificationSettingsSuccess.textContent = "";
+      }
+
+      function canUseAdminPanel(panel) {
+        return Boolean(admin && roleCapabilities[admin.role]?.has(panel));
+      }
+
+      function selectAdminPanel(panel) {
+        if (!canUseAdminPanel(panel)) return;
+        activeAdminPanel = panel;
+        adminTabs.forEach((tab) => {
+          const selected = tab.dataset.adminTab === panel;
+          tab.setAttribute("aria-selected", String(selected));
+        });
+        adminPanels.forEach((item) => {
+          item.hidden = item.dataset.adminPanel !== panel;
+        });
+      }
+
+      function updateAdminNavigation() {
+        const available = adminTabs.filter((tab) => {
+          const roles = (tab.dataset.adminRoles || "").split(" ");
+          const allowed = Boolean(admin && roles.includes(admin.role));
+          tab.hidden = !allowed;
+          return allowed;
+        });
+        const preferred = available.some((tab) => tab.dataset.adminTab === activeAdminPanel)
+          ? activeAdminPanel
+          : available[0]?.dataset.adminTab;
+        if (preferred) selectAdminPanel(preferred);
       }
 
       async function loadPublicServers() {
@@ -664,20 +761,39 @@
 
       async function loadManagementData() {
         if (!admin) return;
-        const [serverResponse, adminResponse, settingsResponse, activityResponse] = await Promise.all([api("admin/servers", { headers: {} }), api("admins", { headers: {} }), api("settings", { headers: {} }), api("activity-log", { headers: {} })]);
-        if (!serverResponse.ok) throw new Error(await responseMessage(serverResponse));
-        if (!adminResponse.ok) throw new Error(await responseMessage(adminResponse));
-        if (!settingsResponse.ok) throw new Error(await responseMessage(settingsResponse));
-        if (!activityResponse.ok) throw new Error(await responseMessage(activityResponse));
-        managedServers = (await serverResponse.json()).servers;
-        administrators = (await adminResponse.json()).admins;
-        activityEntries = (await activityResponse.json()).entries || [];
-        const settings = await settingsResponse.json();
-        document.querySelector("#admin-site-title").value = settings.siteTitle;
-        document.querySelector("#admin-default-refresh-interval").value = settings.defaultRefreshIntervalSeconds;
-        renderAdminList();
-        renderAdminAccounts();
-        renderActivityLog();
+        const [serverResponse, adminResponse, settingsResponse, activityResponse] = await Promise.all([
+          canUseAdminPanel("servers") ? api("admin/servers", { headers: {} }) : null,
+          canUseAdminPanel("access") ? api("admins", { headers: {} }) : null,
+          (canUseAdminPanel("website") || canUseAdminPanel("monitoring")) ? api("settings", { headers: {} }) : null,
+          canUseAdminPanel("logs") ? api("activity-log", { headers: {} }) : null
+        ]);
+        for (const response of [serverResponse, adminResponse, settingsResponse, activityResponse]) {
+          if (response && !response.ok) throw new Error(await responseMessage(response));
+        }
+        if (serverResponse) {
+          managedServers = (await serverResponse.json()).servers;
+          renderAdminList();
+        }
+        if (adminResponse) {
+          administrators = (await adminResponse.json()).admins;
+          renderAdminAccounts();
+        }
+        if (activityResponse) {
+          activityEntries = (await activityResponse.json()).entries || [];
+          renderActivityLog();
+        }
+        if (settingsResponse) {
+          const settings = await settingsResponse.json();
+          document.querySelector("#admin-site-title").value = settings.siteTitle;
+          document.querySelector("#admin-default-refresh-interval").value = settings.defaultRefreshIntervalSeconds;
+          smtpHostInput.value = settings.smtpHost || "";
+          smtpPortInput.value = settings.smtpPort || 587;
+          smtpUsernameInput.value = settings.smtpUsername || "";
+          smtpPasswordInput.value = "";
+          smtpPasswordInput.placeholder = settings.smtpPasswordConfigured ? "Passwort ist gespeichert – nur zum Ändern eingeben" : "Passwort eingeben";
+          smtpFromInput.value = settings.smtpFrom || "";
+          smtpToInput.value = settings.smtpTo || "";
+        }
       }
 
       async function reloadAfterChange(message = "") {
@@ -690,10 +806,11 @@
         const response = await api("session", { headers: {} });
         if (!response.ok) throw new Error(await responseMessage(response));
         const session = await response.json();
-        admin = session.authenticated ? { username: session.username } : null;
+        admin = session.authenticated ? { username: session.username, role: session.role } : null;
         adminButton.textContent = admin ? "Verwaltung" : "Anmelden";
         manager.hidden = !admin;
-        document.querySelector("#admin-name").textContent = admin ? `Angemeldet als ${admin.username}` : "";
+        document.querySelector("#admin-name").textContent = admin ? `Angemeldet als ${admin.username} · ${roleLabels[admin.role] || "Unbekannte Rolle"}` : "";
+        if (admin) updateAdminNavigation();
         if (admin && loadData) await loadManagementData();
       }
 
@@ -723,6 +840,7 @@
         teamSpeakQueryPortInput.value = server.connection?.teamSpeakQueryPort || "";
         connectionHint.textContent = server.connection ? `Gespeicherte Spieladresse: ${server.connection.host}:${server.connection.port}` : "Keine Spieladresse gespeichert. Sie kann aus dem „Connect“-Button übernommen werden.";
         document.querySelector("#server-description").value = server.description || "";
+        document.querySelector("#server-notice").value = server.notice || "";
         document.querySelector("#server-visibility").value = server.visibility || "visible";
         document.querySelector("#server-form-title").textContent = `„${server.name}“ bearbeiten`;
         document.querySelector("#save-server-button").textContent = "Änderungen speichern";
@@ -769,6 +887,17 @@
         await loadManagementData();
       }
 
+      async function updateAdministratorRole(account, role) {
+        adminError.textContent = "";
+        const response = await api(`admins/${encodeURIComponent(account.username)}`, { method: "PATCH", body: JSON.stringify({ role }) });
+        if (!response.ok) {
+          adminError.textContent = await responseMessage(response);
+          await loadManagementData();
+          return;
+        }
+        await loadSession(true);
+      }
+
       async function downloadActivityLog() {
         activityLogError.textContent = "";
         const original = downloadActivityLogButton.textContent;
@@ -791,6 +920,42 @@
         } finally {
           downloadActivityLogButton.disabled = false;
           downloadActivityLogButton.textContent = original;
+        }
+      }
+
+      async function saveNotificationSettings(event) {
+        event.preventDefault();
+        notificationSettingsError.textContent = "";
+        notificationSettingsSuccess.textContent = "";
+        const response = await api("settings", { method: "POST", body: JSON.stringify({
+          smtpHost: smtpHostInput.value,
+          smtpPort: Number(smtpPortInput.value),
+          smtpUsername: smtpUsernameInput.value,
+          smtpPassword: smtpPasswordInput.value,
+          smtpFrom: smtpFromInput.value,
+          smtpTo: smtpToInput.value
+        }) });
+        if (!response.ok) return (notificationSettingsError.textContent = await responseMessage(response));
+        notificationSettingsSuccess.textContent = "E-Mail-Einstellungen gespeichert.";
+        await loadManagementData();
+      }
+
+      async function testEmailNotification() {
+        notificationSettingsError.textContent = "";
+        notificationSettingsSuccess.textContent = "";
+        const original = testEmailNotificationButton.textContent;
+        testEmailNotificationButton.disabled = true;
+        testEmailNotificationButton.textContent = "Wird gesendet …";
+        try {
+          const response = await api("notifications/test", { method: "POST", body: "{}" });
+          if (!response.ok) throw new Error(await responseMessage(response));
+          notificationSettingsSuccess.textContent = "Test-E-Mail wurde gesendet.";
+          await loadManagementData();
+        } catch (error) {
+          notificationSettingsError.textContent = error.message || "Die Test-E-Mail konnte nicht gesendet werden.";
+        } finally {
+          testEmailNotificationButton.disabled = false;
+          testEmailNotificationButton.textContent = original;
         }
       }
 
@@ -894,6 +1059,7 @@
       document.querySelector("#close-admin").addEventListener("click", () => adminDialog.close());
       document.querySelector("#close-login").addEventListener("click", () => loginDialog.close());
       downloadActivityLogButton.addEventListener("click", downloadActivityLog);
+      adminTabs.forEach((tab) => tab.addEventListener("click", () => selectAdminPanel(tab.dataset.adminTab)));
       refreshButton.addEventListener("click", refreshAll);
       visitorRefreshInput.addEventListener("change", () => applyVisitorRefreshInterval(Number(visitorRefreshInput.value)));
       useAdminRefreshDefaultButton.addEventListener("click", useAdminRefreshDefault);
@@ -945,6 +1111,7 @@
           connectionHint: connectionServiceHintInput.value,
           teamSpeakQueryPort: teamSpeakQueryPortInput.value,
           description: document.querySelector("#server-description").value,
+          notice: document.querySelector("#server-notice").value,
           visibility: document.querySelector("#server-visibility").value
         };
         submit.disabled = true;
@@ -980,6 +1147,9 @@
         refreshSettingsSuccess.textContent = "Standard-Aktualisierung gespeichert.";
       });
 
+      notificationSettingsForm.addEventListener("submit", saveNotificationSettings);
+      testEmailNotificationButton.addEventListener("click", testEmailNotification);
+
       document.querySelector("#export-button").addEventListener("click", () => { window.location.assign("api/export"); });
       document.querySelector("#import-file").addEventListener("change", async (event) => {
         clearMessages();
@@ -1006,7 +1176,8 @@
         adminError.textContent = "";
         const username = document.querySelector("#new-admin-username").value;
         const password = document.querySelector("#new-admin-password").value;
-        const response = await api("admins", { method: "POST", body: JSON.stringify({ username, password }) });
+        const role = document.querySelector("#new-admin-role").value;
+        const response = await api("admins", { method: "POST", body: JSON.stringify({ username, password, role }) });
         if (!response.ok) return (adminError.textContent = await responseMessage(response));
         event.currentTarget.reset();
         await loadManagementData();

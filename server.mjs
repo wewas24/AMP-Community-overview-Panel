@@ -4,6 +4,7 @@ import { mkdir, readFile, rename, stat, writeFile } from "node:fs/promises";
 import { randomBytes, randomUUID, scryptSync, timingSafeEqual } from "node:crypto";
 import { createSocket } from "node:dgram";
 import { connect, isIP } from "node:net";
+import { connect as connectTls } from "node:tls";
 import { extname, resolve, sep } from "node:path";
 
 const host = process.env.HOST || "127.0.0.1";
@@ -26,8 +27,16 @@ const defaultSiteTitle = "Meine Gameserver";
 const gameStatusIntervalMs = 30_000;
 const gameStatusTimeoutMs = 3_500;
 const defaultTeamSpeakQueryPort = 10011;
+const defaultSmtpPort = 587;
+const smtpTimeoutMs = 12_000;
 const activityLogRetentionMs = 7 * 24 * 60 * 60 * 1000;
 const activityLogCleanupIntervalMs = 60 * 60 * 1000;
+const adminRoles = new Set(["owner", "editor", "auditor"]);
+const rolePermissions = {
+  owner: new Set(["servers", "settings", "notifications", "access", "logs", "backup"]),
+  editor: new Set(["servers"]),
+  auditor: new Set(["logs"])
+};
 const sessions = new Map();
 const loginAttempts = new Map();
 const availabilityByServer = new Map();
@@ -90,7 +99,7 @@ function validUsername(value) {
 }
 
 function publicAdmin(admin) {
-  return { username: admin.username, createdAt: admin.createdAt };
+  return { username: admin.username, role: admin.role, createdAt: admin.createdAt };
 }
 
 function passwordRecord(password) {
@@ -100,6 +109,31 @@ function passwordRecord(password) {
 
 function validPassword(value) {
   return typeof value === "string" && value.length >= 12 && value.length <= 512;
+}
+
+function normalizeAdminRole(value, fallback = "owner") {
+  return adminRoles.has(value) ? value : fallback;
+}
+
+function adminFromStored(input) {
+  if (!input || !validUsername(input.username) || typeof input.salt !== "string" || typeof input.hash !== "string") return null;
+  return {
+    username: input.username,
+    salt: input.salt,
+    hash: input.hash,
+    role: normalizeAdminRole(input.role),
+    createdAt: typeof input.createdAt === "string" ? input.createdAt : new Date().toISOString()
+  };
+}
+
+function hasPermission(session, permission) {
+  return Boolean(session && rolePermissions[session.role]?.has(permission));
+}
+
+function requirePermission(session, response, permission) {
+  if (hasPermission(session, permission)) return true;
+  sendError(response, 403, "Deine Rolle hat keine Berechtigung für diese Aktion.");
+  return false;
 }
 
 function activityEntryFromStored(input) {
@@ -246,6 +280,7 @@ function normalizeServer(input, index = 0) {
   const url = typeof input?.url === "string" ? input.url.trim() : "";
   const category = cleanText(input?.category, "Allgemein", 40);
   const description = cleanText(input?.description, "", 300);
+  const notice = cleanText(input?.notice, "", 240);
   const visibility = ["visible", "maintenance", "hidden"].includes(input?.visibility) ? input.visibility : "visible";
   const connection = connectionFromStored(input);
   const sortOrder = Number.isInteger(input?.sortOrder) && input.sortOrder >= 0 ? input.sortOrder : index;
@@ -255,6 +290,7 @@ function normalizeServer(input, index = 0) {
     url,
     category,
     description,
+    notice,
     visibility,
     status: "auto",
     connection,
@@ -282,6 +318,7 @@ function serverFromInput(input, existing, sortOrder) {
   if (!name) throw new Error("Der Servername muss 1–60 Zeichen lang sein.");
   const category = cleanText(input?.category, "Allgemein", 40);
   const description = cleanText(input?.description, "", 300);
+  const notice = cleanText(input?.notice, "", 240);
   const visibility = ["visible", "maintenance", "hidden"].includes(input?.visibility) ? input.visibility : "visible";
   const connection = connectionFromInput(input);
   return {
@@ -290,6 +327,7 @@ function serverFromInput(input, existing, sortOrder) {
     url: validateCommunityUrl(input?.url),
     category,
     description,
+    notice,
     visibility,
     status: "auto",
     connection,
@@ -305,6 +343,7 @@ function publicServer(server) {
     url: server.url,
     category: server.category,
     description: server.description,
+    notice: server.notice,
     visibility: server.visibility,
     status: server.status,
     availability: availabilityFor(server),
@@ -473,18 +512,189 @@ async function probeGameConnection(connection) {
     : { state: "unknown", detail: "Der Server konnte mit den verfügbaren TCP- und UDP-Abfragen nicht eindeutig geprüft werden.", checkedAt: new Date().toISOString() };
 }
 
+function smtpConfigurationComplete(settings) {
+  return Boolean(settings.smtpHost && settings.smtpPort && settings.smtpUsername && settings.smtpPassword && settings.smtpFrom && settings.smtpTo);
+}
+
+function smtpError(error) {
+  const message = typeof error?.message === "string" ? error.message.replace(/[\r\n]+/g, " ").trim() : "Unbekannter SMTP-Fehler.";
+  return message.slice(0, 400) || "Unbekannter SMTP-Fehler.";
+}
+
+function waitForSmtpResponse(socket, acceptedCodes) {
+  const accepted = new Set(Array.isArray(acceptedCodes) ? acceptedCodes : [acceptedCodes]);
+  return new Promise((resolveResponse, rejectResponse) => {
+    let buffer = "";
+    const lines = [];
+    const timer = setTimeout(() => finish(new Error("Der SMTP-Server antwortet nicht rechtzeitig.")), smtpTimeoutMs);
+    const cleanup = () => {
+      clearTimeout(timer);
+      socket.off("data", onData);
+      socket.off("error", onError);
+      socket.off("close", onClose);
+    };
+    const finish = (error, response) => {
+      cleanup();
+      if (error) rejectResponse(error);
+      else resolveResponse(response);
+    };
+    const onError = (error) => finish(error);
+    const onClose = () => finish(new Error("Die SMTP-Verbindung wurde geschlossen."));
+    const onData = (chunk) => {
+      buffer += chunk.toString("utf8");
+      let breakAt;
+      while ((breakAt = buffer.indexOf("\n")) !== -1) {
+        const line = buffer.slice(0, breakAt).replace(/\r$/, "");
+        buffer = buffer.slice(breakAt + 1);
+        if (!line) continue;
+        lines.push(line);
+        const match = /^(\d{3})([ -])(?:.*)$/.exec(line);
+        if (!match || match[2] === "-") continue;
+        const code = Number(match[1]);
+        if (!accepted.has(code)) return finish(new Error(`SMTP-Server antwortet mit ${code}: ${line.slice(4) || "Unbekannte Antwort"}`));
+        return finish(null, { code, lines });
+      }
+    };
+    socket.on("data", onData);
+    socket.once("error", onError);
+    socket.once("close", onClose);
+  });
+}
+
+async function smtpCommand(socket, command, acceptedCodes) {
+  const response = waitForSmtpResponse(socket, acceptedCodes);
+  socket.write(`${command}\r\n`);
+  return response;
+}
+
+function openSmtpSocket(settings) {
+  return new Promise((resolveSocket, rejectSocket) => {
+    const socket = connect({ host: settings.smtpHost, port: settings.smtpPort });
+    const timer = setTimeout(() => fail(new Error("Die Verbindung zum SMTP-Server dauert zu lange.")), smtpTimeoutMs);
+    const cleanup = () => {
+      clearTimeout(timer);
+      socket.off("connect", onConnect);
+      socket.off("error", onError);
+    };
+    const fail = (error) => {
+      cleanup();
+      socket.destroy();
+      rejectSocket(error);
+    };
+    const onConnect = () => {
+      cleanup();
+      resolveSocket(socket);
+    };
+    const onError = (error) => fail(error);
+    socket.once("connect", onConnect);
+    socket.once("error", onError);
+  });
+}
+
+function startTls(socket, smtpHost) {
+  return new Promise((resolveSocket, rejectSocket) => {
+    const options = { socket, minVersion: "TLSv1.2", rejectUnauthorized: true };
+    if (!isIP(smtpHost)) options.servername = smtpHost;
+    const secureSocket = connectTls(options);
+    const timer = setTimeout(() => fail(new Error("Der STARTTLS-Aufbau dauert zu lange.")), smtpTimeoutMs);
+    const cleanup = () => {
+      clearTimeout(timer);
+      secureSocket.off("secureConnect", onSecureConnect);
+      secureSocket.off("error", onError);
+    };
+    const fail = (error) => {
+      cleanup();
+      secureSocket.destroy();
+      rejectSocket(error);
+    };
+    const onSecureConnect = () => {
+      cleanup();
+      resolveSocket(secureSocket);
+    };
+    const onError = (error) => fail(error);
+    secureSocket.once("secureConnect", onSecureConnect);
+    secureSocket.once("error", onError);
+  });
+}
+
+function smtpText(value) {
+  return typeof value === "string" ? value.replace(/\r\n/g, "\n").replace(/\r/g, "\n") : "";
+}
+
+async function sendSmtpEmail(settings, subject, text) {
+  if (!smtpConfigurationComplete(settings)) throw new Error("Bitte SMTP-Server, Zugangsdaten, Absender und Empfänger vollständig speichern.");
+  if (settings.smtpPort === 465) throw new Error("Port 465 nutzt TLS direkt und nicht STARTTLS. Bitte den STARTTLS-Port des Mailservers verwenden, meist 587.");
+  let socket;
+  try {
+    socket = await openSmtpSocket(settings);
+    await waitForSmtpResponse(socket, 220);
+    const greeting = await smtpCommand(socket, "EHLO amp-community-dashboard", 250);
+    if (!greeting.lines.some((line) => /\bSTARTTLS\b/i.test(line))) throw new Error("Der SMTP-Server bietet kein STARTTLS an. Bitte Port 587 oder die STARTTLS-Einstellung des Mailservers prüfen.");
+    await smtpCommand(socket, "STARTTLS", 220);
+    socket = await startTls(socket, settings.smtpHost);
+    const secureGreeting = await smtpCommand(socket, "EHLO amp-community-dashboard", 250);
+    const capabilities = secureGreeting.lines.join("\n").toUpperCase();
+    const credentials = Buffer.from(`\u0000${settings.smtpUsername}\u0000${settings.smtpPassword}`, "utf8").toString("base64");
+    if (/\bAUTH\b.*\bPLAIN\b/.test(capabilities)) {
+      await smtpCommand(socket, `AUTH PLAIN ${credentials}`, 235);
+    } else if (/\bAUTH\b.*\bLOGIN\b/.test(capabilities)) {
+      await smtpCommand(socket, "AUTH LOGIN", 334);
+      await smtpCommand(socket, Buffer.from(settings.smtpUsername, "utf8").toString("base64"), 334);
+      await smtpCommand(socket, Buffer.from(settings.smtpPassword, "utf8").toString("base64"), 235);
+    } else {
+      throw new Error("Der SMTP-Server unterstützt keine Anmeldung mit PLAIN oder LOGIN.");
+    }
+    await smtpCommand(socket, `MAIL FROM:<${settings.smtpFrom}>`, 250);
+    await smtpCommand(socket, `RCPT TO:<${settings.smtpTo}>`, [250, 251]);
+    await smtpCommand(socket, "DATA", 354);
+    const body = smtpText(text).replace(/^\./gm, "..");
+    const encodedSubject = Buffer.from(smtpText(subject).replace(/\n/g, " ").slice(0, 160), "utf8").toString("base64");
+    const message = [
+      `From: <${settings.smtpFrom}>`,
+      `To: <${settings.smtpTo}>`,
+      `Subject: =?UTF-8?B?${encodedSubject}?=`,
+      "MIME-Version: 1.0",
+      "Content-Type: text/plain; charset=utf-8",
+      "Content-Transfer-Encoding: 8bit",
+      "",
+      body
+    ].join("\r\n");
+    const delivered = waitForSmtpResponse(socket, 250);
+    socket.write(`${message}\r\n.\r\n`);
+    await delivered;
+    await smtpCommand(socket, "QUIT", 221).catch(() => undefined);
+  } catch (error) {
+    throw new Error(smtpError(error));
+  } finally {
+    if (socket && !socket.destroyed) socket.destroy();
+  }
+}
+
+async function notifyStatusChange(server, previous, current, settings) {
+  if (!smtpConfigurationComplete(settings) || !previous || previous.state === current.state) return;
+  const changedToOffline = previous.state === "online" && current.state === "offline";
+  const changedToOnline = previous.state === "offline" && current.state === "online";
+  if (!changedToOffline && !changedToOnline) return;
+  const subject = changedToOffline ? `Server offline: ${server.name}` : `Server wieder online: ${server.name}`;
+  const detail = current.detail ? `\n\nDetails: ${current.detail}` : "";
+  await sendSmtpEmail(settings, subject, `${subject}${detail}`);
+}
+
 async function refreshGameStatuses() {
   if (availabilityRefresh) return availabilityRefresh;
   availabilityRefresh = (async () => {
-    const servers = await getServers();
+    const [servers, settings] = await Promise.all([getServers(), getSettings()]);
     const activeIds = new Set(servers.map((server) => server.id));
     await Promise.all(servers.map(async (server) => {
       if (!server.connection) {
         availabilityByServer.set(server.id, { state: "unknown", checkedAt: null, detail: "Keine Spielserver-Adresse hinterlegt." });
         return;
       }
+      const previous = availabilityByServer.get(server.id);
       availabilityByServer.set(server.id, { state: "checking", checkedAt: new Date().toISOString(), detail: "Spielserver wird geprüft." });
-      availabilityByServer.set(server.id, await probeGameConnection(server.connection));
+      const current = await probeGameConnection(server.connection);
+      availabilityByServer.set(server.id, current);
+      await notifyStatusChange(server, previous, current, settings).catch((error) => console.error(`E-Mail-Benachrichtigung für „${server.name}“ fehlgeschlagen:`, error));
     }));
     for (const id of availabilityByServer.keys()) {
       if (!activeIds.has(id)) availabilityByServer.delete(id);
@@ -505,7 +715,80 @@ async function getSettings() {
   const settings = await readJson(settingsFile, {});
   return {
     defaultRefreshIntervalSeconds: normalizeRefreshInterval(settings?.defaultRefreshIntervalSeconds),
-    siteTitle: normalizeSiteTitle(settings?.siteTitle)
+    siteTitle: normalizeSiteTitle(settings?.siteTitle),
+    smtpHost: normalizeSmtpHost(settings?.smtpHost),
+    smtpPort: normalizeSmtpPort(settings?.smtpPort),
+    smtpUsername: cleanText(settings?.smtpUsername, "", 253),
+    smtpPassword: smtpPasswordFromStored(settings?.smtpPassword),
+    smtpFrom: normalizeEmailAddress(settings?.smtpFrom),
+    smtpTo: normalizeEmailAddress(settings?.smtpTo)
+  };
+}
+
+function normalizeSmtpHost(value) {
+  const smtpHost = cleanGameHost(value);
+  return validGameHost(smtpHost) ? smtpHost : "";
+}
+
+function smtpHostFromInput(value, fallback = "") {
+  if (value === undefined) return fallback;
+  if (typeof value !== "string" || !value.trim()) return "";
+  const smtpHost = normalizeSmtpHost(value);
+  if (!smtpHost) throw new Error("Bitte einen gültigen SMTP-Server eingeben.");
+  return smtpHost;
+}
+
+function normalizeSmtpPort(value) {
+  const smtpPort = Number(value);
+  return Number.isInteger(smtpPort) && smtpPort >= 1 && smtpPort <= 65535 ? smtpPort : defaultSmtpPort;
+}
+
+function smtpPortFromInput(value, fallback = defaultSmtpPort) {
+  if (value === undefined || value === "") return fallback;
+  const smtpPort = Number(value);
+  if (!Number.isInteger(smtpPort) || smtpPort < 1 || smtpPort > 65535) throw new Error("Der SMTP-Port muss zwischen 1 und 65535 liegen.");
+  return smtpPort;
+}
+
+function normalizeEmailAddress(value) {
+  const address = typeof value === "string" ? value.trim() : "";
+  return /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(address) && address.length <= 254 ? address : "";
+}
+
+function emailAddressFromInput(value, fallback = "", label = "E-Mail-Adresse") {
+  if (value === undefined) return fallback;
+  if (typeof value !== "string" || !value.trim()) return "";
+  const address = normalizeEmailAddress(value);
+  if (!address) throw new Error(`Bitte eine gültige ${label} eingeben.`);
+  return address;
+}
+
+function smtpPasswordFromStored(value) {
+  return typeof value === "string" && value.length <= 512 && !/[\r\n]/.test(value) ? value : "";
+}
+
+function smtpPasswordFromInput(value, fallback = "") {
+  if (value === undefined || value === "") return fallback;
+  if (typeof value !== "string" || value.length > 512 || /[\r\n]/.test(value)) throw new Error("Das SMTP-Passwort ist ungültig.");
+  return value;
+}
+
+function publicSettings(settings) {
+  return {
+    defaultRefreshIntervalSeconds: settings.defaultRefreshIntervalSeconds,
+    siteTitle: settings.siteTitle
+  };
+}
+
+function adminSettings(settings) {
+  return {
+    ...publicSettings(settings),
+    smtpHost: settings.smtpHost,
+    smtpPort: settings.smtpPort,
+    smtpUsername: settings.smtpUsername,
+    smtpFrom: settings.smtpFrom,
+    smtpTo: settings.smtpTo,
+    smtpPasswordConfigured: Boolean(settings.smtpPassword)
   };
 }
 
@@ -516,16 +799,26 @@ function settingsFromInput(input, fallback) {
       : refreshIntervalFromInput(input.defaultRefreshIntervalSeconds),
     siteTitle: input?.siteTitle === undefined
       ? fallback.siteTitle
-      : siteTitleFromInput(input.siteTitle, fallback.siteTitle)
+      : siteTitleFromInput(input.siteTitle, fallback.siteTitle),
+    smtpHost: smtpHostFromInput(input?.smtpHost, fallback.smtpHost),
+    smtpPort: smtpPortFromInput(input?.smtpPort, fallback.smtpPort),
+    smtpUsername: input?.smtpUsername === undefined ? fallback.smtpUsername : cleanText(input.smtpUsername, "", 253),
+    smtpPassword: smtpPasswordFromInput(input?.smtpPassword, fallback.smtpPassword),
+    smtpFrom: emailAddressFromInput(input?.smtpFrom, fallback.smtpFrom, "Absenderadresse"),
+    smtpTo: emailAddressFromInput(input?.smtpTo, fallback.smtpTo, "Empfängeradresse")
   };
 }
 
 async function getAdmins() {
   const saved = await readJson(adminsFile, null);
-  if (Array.isArray(saved)) return saved.filter((admin) => validUsername(admin?.username) && typeof admin?.salt === "string" && typeof admin?.hash === "string");
+  if (Array.isArray(saved)) {
+    const admins = saved.map(adminFromStored).filter(Boolean);
+    if (JSON.stringify(saved) !== JSON.stringify(admins)) await writeJson(adminsFile, admins);
+    return admins;
+  }
   const legacy = await readJson(legacyAdminFile, null);
   if (legacy && validUsername(legacy.username) && typeof legacy.salt === "string" && typeof legacy.hash === "string") {
-    const migrated = [{ username: legacy.username, salt: legacy.salt, hash: legacy.hash, createdAt: legacy.createdAt || new Date().toISOString() }];
+    const migrated = [{ username: legacy.username, salt: legacy.salt, hash: legacy.hash, role: "owner", createdAt: legacy.createdAt || new Date().toISOString() }];
     await writeJson(adminsFile, migrated);
     return migrated;
   }
@@ -535,7 +828,7 @@ async function getAdmins() {
 async function ensureDataFiles() {
   await mkdir(dataDirectory, { recursive: true });
   if (await readJson(serverFile, null) === null) await writeJson(serverFile, []);
-  if (await readJson(settingsFile, null) === null) await writeJson(settingsFile, { defaultRefreshIntervalSeconds, siteTitle: defaultSiteTitle });
+  if (await readJson(settingsFile, null) === null) await writeJson(settingsFile, { defaultRefreshIntervalSeconds, siteTitle: defaultSiteTitle, smtpHost: "", smtpPort: defaultSmtpPort, smtpUsername: "", smtpPassword: "", smtpFrom: "", smtpTo: "" });
 }
 
 function getCookie(request, name) {
@@ -625,12 +918,23 @@ async function requireAdmin(request, response) {
     return null;
   }
   const admins = await getAdmins();
-  if (!admins.some((admin) => admin.username === session.username)) {
+  const account = admins.find((admin) => admin.username === session.username);
+  if (!account) {
     sessions.delete(session.token);
     sendError(response, 401, "Dieses Administratorkonto existiert nicht mehr.");
     return null;
   }
-  return session;
+  return { ...session, role: account.role };
+}
+
+function permissionForApiPath(path) {
+  if (path === "/api/admin/servers" || path === "/api/servers" || path.startsWith("/api/servers/")) return "servers";
+  if (path === "/api/settings") return "settings";
+  if (path === "/api/notifications/test") return "notifications";
+  if (path === "/api/admins" || path.startsWith("/api/admins/")) return "access";
+  if (path === "/api/activity-log" || path === "/api/activity-log/download") return "logs";
+  if (path === "/api/export" || path === "/api/import") return "backup";
+  return null;
 }
 
 async function handleApi(request, response, url) {
@@ -638,7 +942,7 @@ async function handleApi(request, response, url) {
 
   if (request.method === "GET" && path === "/api/servers") {
     const [servers, settings] = await Promise.all([getServers(), getSettings()]);
-    return sendJson(response, 200, { servers: servers.filter((server) => server.visibility !== "hidden").map(publicServer), ...settings });
+    return sendJson(response, 200, { servers: servers.filter((server) => server.visibility !== "hidden").map(publicServer), ...publicSettings(settings) });
   }
 
   if (request.method === "GET" && path === "/api/statuses") {
@@ -650,7 +954,9 @@ async function handleApi(request, response, url) {
 
   if (request.method === "GET" && path === "/api/session") {
     const session = getSession(request);
-    return sendJson(response, 200, { authenticated: Boolean(session), username: session?.username ?? null });
+    const account = session ? (await getAdmins()).find((admin) => admin.username === session.username) : null;
+    if (session && !account) sessions.delete(session.token);
+    return sendJson(response, 200, { authenticated: Boolean(account), username: account?.username ?? null, role: account?.role ?? null });
   }
 
   if (request.method === "POST" && path === "/api/login") {
@@ -669,7 +975,7 @@ async function handleApi(request, response, url) {
     }
     loginAttempts.delete(ip);
     const token = createSession(admin.username);
-    return sendJson(response, 200, { username: admin.username }, { "Set-Cookie": sessionCookie(token) });
+    return sendJson(response, 200, { username: admin.username, role: admin.role }, { "Set-Cookie": sessionCookie(token) });
   }
 
   if (request.method === "POST" && path === "/api/logout") {
@@ -683,6 +989,8 @@ async function handleApi(request, response, url) {
   const session = await requireAdmin(request, response);
   if (!session) return;
   if (request.method !== "GET" && !isSameOrigin(request)) return sendError(response, 403, "Ungültige Anfragequelle.");
+  const requiredPermission = permissionForApiPath(path);
+  if (requiredPermission && !requirePermission(session, response, requiredPermission)) return;
 
   if (request.method === "GET" && path === "/api/admin/servers") {
     return sendJson(response, 200, { servers: (await getServers()).map(adminServer) });
@@ -693,7 +1001,7 @@ async function handleApi(request, response, url) {
   }
 
   if (request.method === "GET" && path === "/api/settings") {
-    return sendJson(response, 200, await getSettings());
+    return sendJson(response, 200, adminSettings(await getSettings()));
   }
 
   if (request.method === "GET" && path === "/api/activity-log") {
@@ -706,7 +1014,7 @@ async function handleApi(request, response, url) {
   }
 
   if (request.method === "GET" && path === "/api/export") {
-    return sendJson(response, 200, { version: 4, exportedAt: new Date().toISOString(), settings: await getSettings(), servers: (await getServers()).map(adminServer) }, { "Content-Disposition": "attachment; filename=amp-community-backup.json" });
+    return sendJson(response, 200, { version: 5, exportedAt: new Date().toISOString(), settings: adminSettings(await getSettings()), servers: (await getServers()).map(adminServer) }, { "Content-Disposition": "attachment; filename=amp-community-backup.json" });
   }
 
   if (request.method === "POST" && path === "/api/settings") {
@@ -714,10 +1022,19 @@ async function handleApi(request, response, url) {
     const previous = await getSettings();
     const settings = settingsFromInput(body, previous);
     await writeJson(settingsFile, settings);
-    if (previous.siteTitle !== settings.siteTitle || previous.defaultRefreshIntervalSeconds !== settings.defaultRefreshIntervalSeconds) {
+    const emailConfigurationChanged = previous.smtpHost !== settings.smtpHost || previous.smtpPort !== settings.smtpPort || previous.smtpUsername !== settings.smtpUsername || previous.smtpPassword !== settings.smtpPassword || previous.smtpFrom !== settings.smtpFrom || previous.smtpTo !== settings.smtpTo;
+    if (previous.siteTitle !== settings.siteTitle || previous.defaultRefreshIntervalSeconds !== settings.defaultRefreshIntervalSeconds || emailConfigurationChanged) {
       await addActivityLog(session.username, "Seiteneinstellungen geändert", `Webseitenname: ${settings.siteTitle}; Aktualisierung: ${settings.defaultRefreshIntervalSeconds} Sekunden`);
     }
-    return sendJson(response, 200, settings);
+    return sendJson(response, 200, adminSettings(settings));
+  }
+
+  if (request.method === "POST" && path === "/api/notifications/test") {
+    const settings = await getSettings();
+    if (!smtpConfigurationComplete(settings)) return sendError(response, 400, "Bitte zuerst SMTP-Server, Zugangsdaten, Absender und Empfänger vollständig speichern.");
+    await sendSmtpEmail(settings, "Test: AMP Community Dashboard", "Dies ist eine Testbenachrichtigung vom AMP Community Dashboard. Die SMTP-Verbindung mit STARTTLS funktioniert.");
+    await addActivityLog(session.username, "E-Mail-Testbenachrichtigung gesendet");
+    return sendJson(response, 200, { ok: true });
   }
 
   if (request.method === "POST" && path === "/api/servers") {
@@ -769,7 +1086,7 @@ async function handleApi(request, response, url) {
     await writeJson(settingsFile, settings);
     await addActivityLog(session.username, "Sicherung importiert", `${saved.length} Server übernommen`);
     triggerGameStatusRefresh();
-    return sendJson(response, 200, { servers: saved.map(publicServer), ...settings });
+    return sendJson(response, 200, { servers: saved.map(publicServer), ...adminSettings(settings) });
   }
 
   if (request.method === "POST" && path === "/api/admins") {
@@ -781,10 +1098,12 @@ async function handleApi(request, response, url) {
     const admins = await getAdmins();
     if (admins.length >= maxAdmins) return sendError(response, 400, `Es können maximal ${maxAdmins} Administratorkonten angelegt werden.`);
     if (admins.some((admin) => admin.username === username)) return sendError(response, 409, "Dieser Benutzername ist bereits vergeben.");
-    const record = { username, ...passwordRecord(password), createdAt: new Date().toISOString() };
+    if (body?.role !== undefined && !adminRoles.has(body.role)) return sendError(response, 400, "Bitte eine gültige Administratorrolle auswählen.");
+    const role = normalizeAdminRole(body?.role, "editor");
+    const record = { username, role, ...passwordRecord(password), createdAt: new Date().toISOString() };
     admins.push(record);
     await writeJson(adminsFile, admins);
-    await addActivityLog(session.username, "Administratorkonto hinzugefügt", username);
+    await addActivityLog(session.username, "Administratorkonto hinzugefügt", `${username} (${role})`);
     return sendJson(response, 201, { admin: publicAdmin(record) });
   }
 
@@ -814,6 +1133,23 @@ async function handleApi(request, response, url) {
   }
 
   const adminMatch = path.match(/^\/api\/admins\/([a-zA-Z0-9_.-]+)$/);
+  if (adminMatch && request.method === "PATCH") {
+    const username = decodeURIComponent(adminMatch[1]);
+    const body = await requestBody(request, 8_192);
+    if (!adminRoles.has(body?.role)) return sendError(response, 400, "Bitte eine gültige Administratorrolle auswählen.");
+    const admins = await getAdmins();
+    const index = admins.findIndex((admin) => admin.username === username);
+    if (index < 0) return sendError(response, 404, "Administratorkonto nicht gefunden.");
+    const previousRole = admins[index].role;
+    if (previousRole === "owner" && body.role !== "owner" && admins.filter((admin) => admin.role === "owner").length <= 1) {
+      return sendError(response, 400, "Mindestens ein Vollzugriff-Konto muss erhalten bleiben.");
+    }
+    admins[index] = { ...admins[index], role: body.role };
+    await writeJson(adminsFile, admins);
+    await addActivityLog(session.username, "Administratorrolle geändert", `${username}: ${body.role}`);
+    return sendJson(response, 200, { admin: publicAdmin(admins[index]) });
+  }
+
   if (adminMatch && request.method === "DELETE") {
     const username = decodeURIComponent(adminMatch[1]);
     const admins = await getAdmins();

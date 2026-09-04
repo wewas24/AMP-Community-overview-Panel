@@ -192,6 +192,10 @@ Für TeamSpeak muss der optionale ServerQuery-Port erreichbar sein (standardmä�
 
 Alle eingebetteten Community-Seiten verwenden denselben Aktualisierungsrhythmus. Der Admin legt den Standard fest; jeder Besucher kann ihn nur für seinen eigenen Browser ändern. Die aktuelle AMP- bzw. Spielserver-Information kommt weiterhin von der jeweiligen Community-Seite.
 
+## Optionale E-Mail-Benachrichtigungen
+
+Unter **Anmelden → Verwaltung → Überwachung** lassen sich Ausfallbenachrichtigungen per SMTP mit STARTTLS einrichten. Dazu SMTP-Server, Port (meist `587`), Benutzername, Passwort, Absender- und Empfängeradresse eintragen, speichern und über **„Test-E-Mail senden“** prüfen. Der Mailserver muss STARTTLS sowie die Anmeldung mit Benutzername und Passwort erlauben. Das Passwort wird nur auf dem Server gespeichert und nicht im Browser oder in Sicherungsdateien ausgegeben.
+
 ## Server anderer AMP-Installationen hinzufügen
 
 Es sind nicht nur Links von `amp.example.com` erlaubt. Im Feld **„AMP- oder Community-Adresse“** kann jede öffentliche HTTPS-Adresse eingetragen werden, zum Beispiel:

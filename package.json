@@ -1,8 +1,8 @@
 {
   "name": "amp-community-dashboard",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
-  "description": "Öffentliche AMP-Community-Übersicht mit geschützter Serververwaltung.",
+  "description": "Öffentliche AMP-Community-Übersicht mit geschützter Serververwaltung und STARTTLS-E-Mail-Benachrichtigungen.",
   "type": "module",
   "scripts": {
     "start": "node server.mjs",

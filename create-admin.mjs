@@ -97,7 +97,7 @@ async function main() {
 
   const { salt, hash } = passwordHash(password);
   await mkdir(dirname(adminsFile), { recursive: true });
-  await writeFile(adminsFile, JSON.stringify([{ username, salt, hash, createdAt: new Date().toISOString() }], null, 2), { mode: 0o600, flag: "wx" });
+  await writeFile(adminsFile, JSON.stringify([{ username, salt, hash, role: "owner", createdAt: new Date().toISOString() }], null, 2), { mode: 0o600, flag: "wx" });
   console.log(`Administratorkonto „${username}“ wurde erstellt.`);
 }
 
