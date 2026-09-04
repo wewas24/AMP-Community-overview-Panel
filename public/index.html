@@ -138,11 +138,11 @@
       <p class="footer-note">Diese Übersicht zeigt ausschließlich die öffentlichen AMP-Community-Seiten. Die AMP-Verwaltung bleibt geschützt.</p>
     </main>
 
-    <dialog id="admin-dialog" aria-labelledby="admin-title">
+    <dialog id="login-dialog" aria-labelledby="login-title">
       <div class="dialog-content">
         <div class="dialog-title-row">
-          <div><h2 id="admin-title">Server verwalten</h2><p class="dialog-copy" id="admin-description">Melde dich mit deinem Administratorkonto an.</p></div>
-          <button class="close" id="close-admin" type="button" aria-label="Fenster schließen">×</button>
+          <div><h2 id="login-title">Anmelden</h2><p class="dialog-copy">Melde dich mit deinem Administratorkonto an, um die Verwaltung zu öffnen.</p></div>
+          <button class="close" id="close-login" type="button" aria-label="Anmeldefenster schließen">×</button>
         </div>
 
         <form class="form-grid one" id="login-form">
@@ -151,6 +151,15 @@
           <div class="form-actions"><button class="button" type="submit">Anmelden</button></div>
           <p class="error" id="login-error" aria-live="polite"></p>
         </form>
+      </div>
+    </dialog>
+
+    <dialog id="admin-dialog" aria-labelledby="admin-title">
+      <div class="dialog-content">
+        <div class="dialog-title-row">
+          <div><h2 id="admin-title">Verwaltung</h2><p class="dialog-copy">Bearbeite alle Einstellungen der öffentlichen Serverübersicht.</p></div>
+          <button class="close" id="close-admin" type="button" aria-label="Verwaltung schließen">×</button>
+        </div>
 
         <section class="manager" id="manager" hidden>
           <form class="admin-section" id="server-form">
@@ -225,6 +234,7 @@
       const categoryFilter = document.querySelector("#category-filter");
       const statusFilter = document.querySelector("#status-filter");
       const filterSummary = document.querySelector("#filter-summary");
+      const loginDialog = document.querySelector("#login-dialog");
       const adminDialog = document.querySelector("#admin-dialog");
       const loginForm = document.querySelector("#login-form");
       const manager = document.querySelector("#manager");
@@ -255,6 +265,7 @@
       let activeRefreshIntervalSeconds = DEFAULT_REFRESH_INTERVAL_SECONDS;
       let admin = null;
       let renderedServerIds = [];
+      let sortMoveBusy = false;
 
       const gamepadIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="6" y1="11" x2="10" y2="11"></line><line x1="8" y1="9" x2="8" y2="13"></line><line x1="15" y1="12" x2="15.01" y2="12"></line><line x1="18" y1="10" x2="18.01" y2="10"></line><path d="M17.5 5.5c-2.3.5-3.6.5-5.5.5s-3.2 0-5.5-.5C4.6 5.1 3 6.6 3 8.5v5c0 2.1 1.7 3.5 3.8 3.5 1.2 0 2.2-.6 2.9-1.5l1-1.3h2.6l1 1.3c.7.9 1.7 1.5 2.9 1.5 2.1 0 3.8-1.4 3.8-3.5v-5c0-1.9-1.6-3.4-3.5-3z"></path></svg>';
 
@@ -514,10 +525,12 @@
           info.append(name, url, flags);
           const actions = document.createElement("div");
           actions.className = "row-actions";
-          const up = managerButton("↑", "Nach oben verschieben", () => moveServer(server.id, -1));
-          up.disabled = index === 0;
-          const down = managerButton("↓", "Nach unten verschieben", () => moveServer(server.id, 1));
-          down.disabled = index === managedServers.length - 1;
+          const up = managerButton("↑ Nach oben", "Nach oben verschieben", () => moveServer(server.id, -1));
+          up.dataset.orderButton = "true";
+          up.disabled = sortMoveBusy || index === 0;
+          const down = managerButton("↓ Nach unten", "Nach unten verschieben", () => moveServer(server.id, 1));
+          down.dataset.orderButton = "true";
+          down.disabled = sortMoveBusy || index === managedServers.length - 1;
           const edit = managerButton("Bearbeiten", "Server bearbeiten", () => beginEdit(server));
           const remove = managerButton("Entfernen", "Server entfernen", () => deleteServer(server), "delete");
           actions.append(up, down, edit, remove);
@@ -627,16 +640,15 @@
         if (message) serverSuccess.textContent = message;
       }
 
-      async function loadSession() {
+      async function loadSession(loadData = false) {
         const response = await api("session", { headers: {} });
+        if (!response.ok) throw new Error(await responseMessage(response));
         const session = await response.json();
         admin = session.authenticated ? { username: session.username } : null;
         adminButton.textContent = admin ? "Verwaltung" : "Anmelden";
-        loginForm.hidden = Boolean(admin);
         manager.hidden = !admin;
-        document.querySelector("#admin-description").textContent = admin ? "Bearbeite alle Einstellungen der öffentlichen Serverübersicht." : "Melde dich mit deinem Administratorkonto an.";
         document.querySelector("#admin-name").textContent = admin ? `Angemeldet als ${admin.username}` : "";
-        if (admin) await loadManagementData();
+        if (admin && loadData) await loadManagementData();
       }
 
       function resetServerForm() {
@@ -673,15 +685,25 @@
       }
 
       async function moveServer(id, direction) {
+        if (sortMoveBusy) return;
         clearMessages();
         const index = managedServers.findIndex((server) => server.id === id);
         const target = index + direction;
         if (index < 0 || target < 0 || target >= managedServers.length) return;
         const ids = managedServers.map((server) => server.id);
         [ids[index], ids[target]] = [ids[target], ids[index]];
-        const response = await api("servers/order", { method: "POST", body: JSON.stringify({ ids }) });
-        if (!response.ok) return (serverError.textContent = await responseMessage(response));
-        await reloadAfterChange("Reihenfolge gespeichert.");
+        sortMoveBusy = true;
+        renderAdminList();
+        try {
+          const response = await api("servers/order", { method: "POST", body: JSON.stringify({ ids }) });
+          if (!response.ok) throw new Error(await responseMessage(response));
+          await reloadAfterChange("Reihenfolge gespeichert.");
+        } catch (error) {
+          serverError.textContent = error.message || "Die Reihenfolge konnte nicht gespeichert werden.";
+        } finally {
+          sortMoveBusy = false;
+          renderAdminList();
+        }
       }
 
       async function deleteServer(server) {
@@ -786,15 +808,20 @@
         loginError.textContent = "";
         clearMessages();
         try {
-          await loadSession();
-          adminDialog.showModal();
-          if (!admin) document.querySelector("#username").focus();
+          await loadSession(true);
+          if (admin) {
+            adminDialog.showModal();
+          } else {
+            loginDialog.showModal();
+            document.querySelector("#username").focus();
+          }
         } catch (error) {
           loginError.textContent = error.message;
-          adminDialog.showModal();
+          loginDialog.showModal();
         }
       });
       document.querySelector("#close-admin").addEventListener("click", () => adminDialog.close());
+      document.querySelector("#close-login").addEventListener("click", () => loginDialog.close());
       refreshButton.addEventListener("click", refreshAll);
       visitorRefreshInput.addEventListener("change", () => applyVisitorRefreshInterval(Number(visitorRefreshInput.value)));
       useAdminRefreshDefaultButton.addEventListener("click", useAdminRefreshDefault);
@@ -827,7 +854,9 @@
         const response = await api("login", { method: "POST", body: JSON.stringify({ username: form.get("username"), password: form.get("password") }) });
         if (!response.ok) return (loginError.textContent = await responseMessage(response));
         loginForm.reset();
-        await loadSession();
+        await loadSession(true);
+        loginDialog.close();
+        adminDialog.showModal();
       });
 
       serverForm.addEventListener("submit", async (event) => {
@@ -918,6 +947,7 @@
         managedServers = [];
         administrators = [];
         resetServerForm();
+        adminDialog.close();
         await loadSession();
       });
 

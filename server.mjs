@@ -671,8 +671,8 @@ async function handleApi(request, response, url) {
     }
     const byId = new Map(servers.map((server) => [server.id, server]));
     const ordered = ids.map((id) => byId.get(id));
-    await saveServers(ordered);
-    return sendJson(response, 200, { servers: ordered.map(publicServer) });
+    const saved = await saveServers(ordered);
+    return sendJson(response, 200, { servers: saved.map(publicServer) });
   }
 
   if (request.method === "POST" && path === "/api/import") {
